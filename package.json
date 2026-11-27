@@ -5,11 +5,12 @@
   "description": "Tempo's questions in a panel of the Herdr desktop app",
   "license": "MIT",
   "repository": "github:andrebras/herdr-tempo",
+  "type": "module",
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
-    "test": "node --test tests/*.test.js",
+    "test": "node --test tests/*.test.mjs",
     "lint": "biome lint --error-on-warnings"
   },
   "devDependencies": {

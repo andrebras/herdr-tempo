@@ -1,15 +1,14 @@
 // Tests for the panel's pure functions, run with `node --test`. The panel imports
 // Herdr's own modules, which only exist inside Herdr, so this reads each function (and
 // the constants it uses) out of the panel's source and runs just those.
-const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
-const { join } = require("node:path");
-const { test } = require("node:test");
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
 
 // A zone east of UTC, so a time shown in UTC can't pass for local time.
 process.env.TZ = "Asia/Kolkata";
 
-const source = readFileSync(join(__dirname, "..", "mods", "tempo", "main.js"), "utf8");
+const source = readFileSync(new URL("../mods/tempo/main.js", import.meta.url), "utf8");
 
 // The top-level `const NAME = …;` or `function NAME(…) { … }` called name, as source.
 function part(name) {
