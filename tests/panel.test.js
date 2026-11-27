@@ -106,3 +106,26 @@ test("without a working watch, reads are often while the window shows", () => {
   assert.equal(readEvery(false, true), 4000);
   assert.equal(readEvery(false, false), 30000);
 });
+
+const friendly = load("friendly");
+
+test("an error says what failed, with Tempo's own last line", () => {
+  const error = new Error("Traceback (most recent call last):\n  File x\nsqlite3.OperationalError: database is locked\n");
+  assert.equal(
+    friendly(error, "read the questions"),
+    "Tempo couldn't read the questions: sqlite3.OperationalError: database is locked.",
+  );
+});
+
+test("a timeout and output that isn't JSON are put in words", () => {
+  assert.equal(
+    friendly(new Error("`tempo` timed out after 15000 ms"), "read the questions"),
+    "Tempo took too long to read the questions.",
+  );
+  assert.match(friendly(new SyntaxError("Unexpected token"), "open the question"), /Is Tempo up to date\?$/);
+});
+
+test("an error with no text still says what failed", () => {
+  assert.equal(friendly(new Error(""), "open the question"), "Tempo couldn't open the question.");
+  assert.equal(friendly(new Error("No such project."), "open the question"), "Tempo couldn't open the question: No such project.");
+});

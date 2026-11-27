@@ -230,8 +230,9 @@ export default class Tempo extends View {
       if (changed) cx.notify();
     } catch (error) {
       if (read !== this.reads) return;
-      if (this.error !== String(error)) {
-        this.error = String(error);
+      const text = `${friendly(error, "read the questions")} The panel tries again shortly.`;
+      if (this.error !== text) {
+        this.error = text;
         cx.notify();
       }
     } finally {
@@ -307,7 +308,7 @@ export default class Tempo extends View {
         this.open.question = { ...question, waiting: list?.waiting ?? null };
       }
     } catch (error) {
-      notify({ title: "Tempo", body: String(error), level: "error" });
+      notify({ title: "Tempo", body: friendly(error, "open the question"), level: "error" });
       this.open = null;
     }
     cx.notify();
@@ -666,6 +667,20 @@ async function findTempo() {
   const fallback = `${home()}/.local/bin/tempo`;
   const test = await exec("/bin/test", ["-x", fallback]).catch(() => null);
   return test?.code === 0 ? fallback : null;
+}
+
+// What went wrong, for people: what failed, and why if known. Tempo's own message is
+// kept (its last line: a Python error ends with the one that says what happened);
+// Herdr's and JavaScript's are put in words.
+function friendly(error, what) {
+  const text = String(error?.message ?? error ?? "").trim();
+  if (/timed out/.test(text)) return `Tempo took too long to ${what}.`;
+  if (error instanceof SyntaxError) {
+    return `Tempo couldn't ${what}: its answer wasn't the JSON the panel expects. Is Tempo up to date?`;
+  }
+  const last = (text.split("\n").filter((line) => line.trim()).pop() ?? "").trim();
+  if (!last) return `Tempo couldn't ${what}.`;
+  return `Tempo couldn't ${what}: ${last}${/[.!?]$/.test(last) ? "" : "."}`;
 }
 
 // Run tempo and read its JSON output.
