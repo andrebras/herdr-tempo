@@ -34,7 +34,7 @@ const SHOWN_MS = 4000;
 const HIDDEN_MS = 30000;
 // How often to look for another shown space. Cheap (no program runs), and it keeps the count
 // on the Tempo button right while the panel is hidden, when it never draws.
-const SPACE_MS = 300;
+const SPACE_MS = 1000;
 // The files a change to the questions touches: the database and its write-ahead log. Not
 // "-shm", which every read touches too, so a read would start the next one.
 const DATABASE = /\/questions\.db(-wal)?$/;
