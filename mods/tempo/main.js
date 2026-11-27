@@ -29,9 +29,15 @@ import {
   window,
 } from "herdr";
 
-// How often to read the questions while the window shows, and while it is hidden.
+// How often to read the questions while the window shows, and while it is hidden, when
+// nothing else says they changed. Each read starts tempo twice.
 const SHOWN_MS = 4000;
 const HIDDEN_MS = 30000;
+// How often while the watch on Tempo's database works: it reads at once on every change,
+// so the timer is only a safety net.
+const WATCHED_MS = 60000;
+// How long to wait before watching again after a watch ended or couldn't start.
+const REWATCH_MS = 60000;
 // How often to look for another shown space. Cheap (no program runs), and it keeps the count
 // on the Tempo button right while the panel is hidden, when it never draws.
 const SPACE_MS = 1000;
@@ -92,6 +98,9 @@ export default class Tempo extends View {
     this.switched = undefined; // the space switchSpace last read
     this.seen = new Map(); // each folder's last list, shown at once when you switch back
     this.last = 0;
+    this.watching = false; // the watch on Tempo's database is alive
+    this.watched = 0; // when it last started
+    this.missed = false; // a timed read found a change the watch didn't report
     this.open = null; // the question shown in full: { project, number, question, pick }
     this.sending = false;
     // One note for both buttons, as on Tempo's page: it goes with the answer, or alone
@@ -110,8 +119,11 @@ export default class Tempo extends View {
       if (this.tempo && shownFolder() !== (this.mine?.cwd ?? null)) this.switchSpace(cx);
     });
     cx.timer.every(SHOWN_MS, (cx) => {
-      const wait = window()?.visible === false ? HIDDEN_MS : SHOWN_MS;
-      if (Date.now() - this.last >= wait - 100) cx.spawn((cx) => this.refresh(cx));
+      if (this.tempo && !this.watching && Date.now() - this.watched >= REWATCH_MS) {
+        cx.spawn((cx) => this.watch(cx));
+      }
+      const wait = readEvery(this.watching && !this.missed, window()?.visible !== false);
+      if (Date.now() - this.last >= wait - 100) cx.spawn((cx) => this.refresh(cx, false, true));
     });
     cx.spawn(async (cx) => {
       for (;;) {
@@ -133,16 +145,27 @@ export default class Tempo extends View {
   }
 
   // Read the questions again as soon as Tempo's database changes, so the count on the
-  // Tempo button follows an answer or a new question at once, not at the next tick. The
-  // timer stays as the fallback: another database (TEMPO_DB, a checkout's own), or a
-  // watch Herdr took back.
+  // Tempo button follows an answer or a new question at once, not at the next tick. While
+  // the watch works, the timer reads only once a minute. It reads more often again when
+  // there's no database yet, when the watch ends (the timer starts it again later), or
+  // when a timed read finds a change the watch missed: Tempo then uses another database
+  // (TEMPO_DB, a checkout's own).
   async watch(cx) {
+    this.watching = true;
+    this.watched = Date.now();
+    this.missed = false;
     const folder = await databaseFolder();
-    if (!folder) return;
-    for (;;) {
-      const paths = await watchFolder(folder).catch(() => []);
-      if (paths.length === 0) return;
-      if (paths.some((p) => p === folder || DATABASE.test(p))) cx.spawn((cx) => this.refresh(cx));
+    try {
+      while (folder) {
+        const paths = await watchFolder(folder);
+        // No paths: the watch was cancelled, as when this copy closes.
+        if (paths.length === 0) break;
+        if (paths.some((p) => p === folder || DATABASE.test(p))) cx.spawn((cx) => this.refresh(cx));
+      }
+    } catch {
+      // The watch couldn't start or stopped; the timer tries again.
+    } finally {
+      this.watching = false;
     }
   }
 
@@ -167,7 +190,8 @@ export default class Tempo extends View {
   // A read asked for while one runs is done right after it, so no change is missed.
   // now: read even while a read runs, as after sending; that older read is then dropped,
   // since its lists may be from before the send.
-  async refresh(cx, now = false) {
+  // timed: the timer asked, so a change found means the watch missed it.
+  async refresh(cx, now = false, timed = false) {
     if (!this.tempo) return;
     if (this.busy && !now) {
       this.again = true;
@@ -185,10 +209,12 @@ export default class Tempo extends View {
       ]);
       if (read !== this.reads) return;
       if (cwd) this.seen.set(cwd, mine);
+      const moved = JSON.stringify(all) !== JSON.stringify(this.all);
+      if (timed && moved && this.watching) this.missed = true;
       // With no space (cwd null) this.mine is null: ?? null keeps null and undefined from
       // counting as a change, which would draw, and so read again, without end.
       const changed =
-        JSON.stringify(all) !== JSON.stringify(this.all) ||
+        moved ||
         JSON.stringify(mine) !== JSON.stringify(this.mine?.questions ?? null) ||
         cwd !== (this.mine?.cwd ?? null);
       this.all = all;
@@ -674,6 +700,13 @@ function unannounced(all, mark) {
     .filter((q) => !known.has(key(q)))
     .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
   return { fresh, keys };
+}
+
+// How long to wait between timed reads: rarely while the watch reports every change,
+// else often while the window shows and less while it is hidden.
+function readEvery(watched, visible) {
+  if (watched) return WATCHED_MS;
+  return visible ? SHOWN_MS : HIDDEN_MS;
 }
 
 // Questions by goal, keeping tempo's order; questions without a goal come last.
