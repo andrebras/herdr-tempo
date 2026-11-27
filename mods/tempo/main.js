@@ -37,6 +37,23 @@ import { Reads } from "./reads.js";
 import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
 import { FIND_MS, readEvery, REWATCH_MS, SHOWN_MS, SPACE_MS, TEMPO_TIMEOUT_MS } from "./timing.js";
 
+/** @typedef {import("gpui-kit").AsyncContext} AsyncContext */
+/** @typedef {import("gpui-kit").Context} Context */
+/** @typedef {Record<string, import("gpui-kit").Color>} Theme the theme's colours, by name, each "#rrggbb" */
+/** @typedef {import("./questions.js").Question} Question */
+/** @typedef {{ cwd: string, project: string | null, questions: Question[] }} Mine the shown space's list */
+/** @typedef {{ letter: string, text: string }} Option */
+/**
+ * @typedef {{ id: number, author: string, kind: string, choice?: string, body?: string | null,
+ *   created_at: string }} Entry an entry in a question's thread
+ */
+/**
+ * A question in full, as `tempo show --json` gives it, with waiting from the list.
+ * @typedef {Question & { context: string, options: Option[], recommended?: string | null,
+ *   version: number, entries: Entry[] }} Full
+ */
+/** @typedef {{ project: string, number: number, question: Full | null, pick: string | null }} Open */
+
 // The files a change to the questions touches: the database and its write-ahead log. Not
 // "-shm", which every read touches too, so a read would start the next one.
 const DATABASE = /\/questions\.db(-wal)?$/;
@@ -49,12 +66,17 @@ const BADGE = "tempo.badge";
 // Text sizes follow the terminal font size (Settings → Look → Terminal font), the one
 // size Herdr lets you change: a question's text is that size (size(1)), the list and the
 // thread one step smaller (size(0)), labels two, the title one larger.
+/** @param {number} step */
 function size(step) {
-  return (settings()?.font_size ?? 14) - 1 + step;
+  return Number(settings()?.font_size ?? 14) - 1 + step;
 }
 
 // Question text as Tempo's page shows it (lineBreaks() in text.js). HTML in the text shows
 // as typed, never as markup.
+/**
+ * @param {string} id
+ * @param {unknown} text
+ */
 function rich(id, text) {
   return TextView.markdown(id, lineBreaks(text)).raw_html(false).selectable(true);
 }
@@ -69,21 +91,60 @@ const MISSING =
 // This mod's block in Herdr's side panel.
 const PANEL = "panel-tempo";
 export default class Tempo extends View {
+  // The fields init() sets. Herdr makes the view first and runs init() after, so these
+  // declarations (undefined until then) never wipe what init() sets.
+  /** @type {string | null} the tempo command's path, once found */
+  tempo;
+  /** @type {boolean} no tempo command on this machine */
+  missing;
+  /** @type {number} when the tempo command was last looked for */
+  looked;
+  /** @type {Question[]} every project's open questions */
+  all;
+  /** @type {Mine | null} the shown space's list */
+  mine;
+  /** @type {string | null} why the last read failed */
+  error;
+  /** @type {Reads} which read counts, and whether another is due */
+  reads;
+  /** @type {string | null | undefined} the space switchSpace last read */
+  switched;
+  /** @type {Map<string, Question[]>} each folder's last list, shown at once when you switch back */
+  seen;
+  /** @type {number} when the last read started */
+  last;
+  /** @type {boolean} the watch on Tempo's database is alive */
+  watching;
+  /** @type {number} when it last started */
+  watched;
+  /** @type {boolean} a timed read found a change the watch didn't report */
+  missed;
+  /** @type {Open | null} the question shown in full */
+  open;
+  /** @type {boolean} an answer or a follow-up is being sent */
+  sending;
+  /** @type {import("gpui-base").TextareaState} the note */
+  note;
+
+  /**
+   * @param {unknown} _props
+   * @param {AsyncContext} cx
+   */
   init(_props, cx) {
-    this.tempo = null; // the tempo command's path, once found
-    this.missing = false; // no tempo command on this machine
-    this.looked = 0; // when the tempo command was last looked for
-    this.all = []; // every project's open questions
-    this.mine = null; // the shown space's: { cwd, project, questions }
+    this.tempo = null;
+    this.missing = false;
+    this.looked = 0;
+    this.all = [];
+    this.mine = null;
     this.error = null;
-    this.reads = new Reads(); // which read counts, and whether another is due
-    this.switched = undefined; // the space switchSpace last read
-    this.seen = new Map(); // each folder's last list, shown at once when you switch back
+    this.reads = new Reads();
+    this.switched = undefined;
+    this.seen = new Map();
     this.last = 0;
-    this.watching = false; // the watch on Tempo's database is alive
-    this.watched = 0; // when it last started
-    this.missed = false; // a timed read found a change the watch didn't report
-    this.open = null; // the question shown in full: { project, number, question, pick }
+    this.watching = false;
+    this.watched = 0;
+    this.missed = false;
+    this.open = null;
     this.sending = false;
     // One note for both buttons, as on Tempo's page: it goes with the answer, or alone
     // as a request for more context.
@@ -113,6 +174,7 @@ export default class Tempo extends View {
   }
 
   // Look for the tempo command; once found, read the questions and watch for changes.
+  /** @param {AsyncContext} cx */
   async find(cx) {
     this.looked = Date.now();
     this.tempo = await findTempo();
@@ -123,6 +185,10 @@ export default class Tempo extends View {
   }
 
   // "open": the shown project's first question; "open:N:project": that one.
+  /**
+   * @param {string} command
+   * @param {AsyncContext} cx
+   */
   async command(command, cx) {
     const parsed = parseCommand(command);
     if (!parsed) return;
@@ -138,6 +204,7 @@ export default class Tempo extends View {
   // there's no database yet, when the watch ends (the timer starts it again later), or
   // when a timed read finds a change the watch missed: Tempo then uses another database
   // (TEMPO_DB, a checkout's own).
+  /** @param {AsyncContext} cx */
   async watch(cx) {
     this.watching = true;
     this.watched = Date.now();
@@ -161,12 +228,13 @@ export default class Tempo extends View {
   // read. render calls this, and so does a timer, since a hidden panel never draws.
   // Once per switch: a read that fails leaves this.mine on the old space, and must not
   // make every tick read again.
+  /** @param {AsyncContext} cx */
   switchSpace(cx) {
     const cwd = shownFolder();
     if (cwd === this.switched) return;
     this.switched = cwd;
     const last = cwd ? this.seen.get(cwd) : undefined;
-    if (last) {
+    if (cwd && last) {
       this.mine = { cwd, questions: last, project: last[0]?.project ?? null };
       if (shared(BADGE) !== last.length) setShared(BADGE, last.length);
     }
@@ -179,6 +247,7 @@ export default class Tempo extends View {
   // now: read even while a read runs, as after sending; that older read is then dropped,
   // since its lists may be from before the send.
   // timed: the timer asked, so a change found means the watch missed it.
+  /** @param {AsyncContext} cx */
   async refresh(cx, now = false, timed = false) {
     if (!this.tempo) return;
     const read = this.reads.start(now);
@@ -229,8 +298,10 @@ export default class Tempo extends View {
   }
 
   // Keep the open question current: reread it when it changed, close it once it isn't open.
+  /** @param {AsyncContext} cx */
   async follow(cx) {
-    const { project, number, question } = this.open;
+    // Called only while a question shows.
+    const { project, number, question } = /** @type {Open} */ (this.open);
     const now = this.all.find((q) => q.project === project && q.number === number);
     if (!now) {
       this.open = null;
@@ -241,6 +312,7 @@ export default class Tempo extends View {
   }
 
   // Toast the questions not announced before; the first read only sets the mark.
+  /** @param {Question[]} all */
   announce(all) {
     const { fresh, keys } = unannounced(all, shared(ANNOUNCED));
     const reveal = { name: "layout.select", args: { stack: "panel-body", child: PANEL, show: true } };
@@ -249,6 +321,11 @@ export default class Tempo extends View {
     if (!Array.isArray(mark) || mark.join("\n") !== keys.join("\n")) setShared(ANNOUNCED, keys);
   }
 
+  /**
+   * @param {string} project
+   * @param {number} number
+   * @param {AsyncContext} cx
+   */
   async show(project, number, cx) {
     this.open = { project, number, question: null, pick: null };
     this.note.set_value("");
@@ -256,6 +333,7 @@ export default class Tempo extends View {
     await this.load(cx);
   }
 
+  /** @param {AsyncContext} cx */
   async load(cx) {
     const { project, number } = this.open ?? {};
     if (!this.tempo || !project) return;
@@ -274,16 +352,19 @@ export default class Tempo extends View {
   }
 
   // The person's own answer, sent as the page sends it.
+  /** @param {AsyncContext} cx */
   async send(cx) {
     const { project, number, pick } = this.open ?? {};
-    if (!pick || this.sending) return;
+    if (!pick || !project || this.sending) return;
     this.sending = true;
     cx.notify();
     const args = ["answer", String(number), pick, "--project", project];
     const note = this.note.value().trim();
     // As one word, so a note that starts with a dash, such as --force, isn't read as an option.
     if (note) args.push(`--note=${note}`);
-    const r = await exec(this.tempo, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
+    // A question shows only once the tempo command was found.
+    const path = /** @type {string} */ (this.tempo);
+    const r = await exec(path, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
       code: 1,
       stderr: String(e),
     }));
@@ -302,6 +383,7 @@ export default class Tempo extends View {
   }
 
   // The person's own follow-up: Claude answers it in the question.
+  /** @param {AsyncContext} cx */
   async followUp(cx) {
     const body = this.note.value().trim();
     const { project, number } = this.open ?? {};
@@ -310,7 +392,9 @@ export default class Tempo extends View {
     cx.notify();
     // The text after --, so one that starts with a dash isn't read as an option.
     const args = ["reply", String(number), "--project", project, "--", body];
-    const r = await exec(this.tempo, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
+    // A question shows only once the tempo command was found.
+    const path = /** @type {string} */ (this.tempo);
+    const r = await exec(path, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
       code: 1,
       stderr: String(e),
     }));
@@ -325,8 +409,10 @@ export default class Tempo extends View {
     cx.notify();
   }
 
+  /** @param {Context} cx */
   render(cx) {
-    const t = theme();
+    // Herdr gives each colour as a "#rrggbb" string.
+    const t = /** @type {Theme} */ (theme());
     const cwd = shownFolder();
     if (this.tempo && cwd !== (this.mine?.cwd ?? null)) this.switchSpace(cx);
     const body = this.open ? this.detail(t) : this.list(t, cwd);
@@ -348,6 +434,7 @@ export default class Tempo extends View {
 
   // As Files' header: back while a question shows, the name, and the project (the folder
   // while it has no open question).
+  /** @param {Theme} t */
   header(t) {
     return h_flex()
       .h(42)
@@ -384,6 +471,10 @@ export default class Tempo extends View {
       );
   }
 
+  /**
+   * @param {Theme} t
+   * @param {string | null} cwd
+   */
   list(t, cwd) {
     const mine = this.mine?.questions ?? [];
     return v_flex()
@@ -403,6 +494,11 @@ export default class Tempo extends View {
   }
 
   // A line saying why the list is empty, if it is.
+  /**
+   * @param {Theme} t
+   * @param {string | null} cwd
+   * @param {Question[]} mine
+   */
   status(t, cwd, mine) {
     let text = null;
     if (checking()) text = "";
@@ -414,6 +510,10 @@ export default class Tempo extends View {
     return [div().px(4).py(6).text_size(size(-1)).text_color(t.muted).child(text)];
   }
 
+  /**
+   * @param {Theme} t
+   * @param {Question} q
+   */
   row(t, q) {
     return h_flex()
       .id(`q-${q.project}-${q.number}`)
@@ -430,11 +530,14 @@ export default class Tempo extends View {
   }
 
   // One question in full: what it is, the options to pick from, and its thread.
+  /** @param {Theme} t */
   detail(t) {
-    const q = this.open.question;
+    // render draws this only while a question shows.
+    const open = /** @type {Open} */ (this.open);
+    const q = open.question;
     const pane = v_flex().id("tempo-detail").flex_1().min_h(0).overflow_y_scrollbar().p(12).gap(12);
     if (!q) return pane.child(div().text_color(t.muted).child("Reading…"));
-    const pick = this.open.pick;
+    const pick = open.pick;
     return pane
       .child(
         v_flex()
@@ -445,7 +548,7 @@ export default class Tempo extends View {
               .text_size(size(-1))
               .text_color(t.dim)
               .child(div().text_color(t.accent).child(q.label))
-              .when(Boolean(q.goal), (el) => el.child(div().truncate().child(q.goal))),
+              .when(Boolean(q.goal), (el) => el.child(div().truncate().child(q.goal ?? ""))),
           )
           .child(div().text_size(size(2)).font_semibold().child(q.title)),
       )
@@ -504,6 +607,12 @@ export default class Tempo extends View {
       );
   }
 
+  /**
+   * @param {Theme} t
+   * @param {Option} o
+   * @param {boolean} picked
+   * @param {boolean} recommended
+   */
   option(t, o, picked, recommended) {
     return h_flex()
       .id(`opt-${o.letter}`)
@@ -518,7 +627,7 @@ export default class Tempo extends View {
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => {
-        this.open.pick = picked ? null : o.letter;
+        if (this.open) this.open.pick = picked ? null : o.letter;
         cx.notify();
       })
       .child(div().flex_none().text_color(t.accent).child(`(${o.letter})`))
@@ -529,6 +638,14 @@ export default class Tempo extends View {
   }
 
   // A button that does nothing while it can't act or while something is sending.
+  /**
+   * @param {Theme} t
+   * @param {string} id
+   * @param {string} label
+   * @param {boolean} enabled
+   * @param {boolean} primary
+   * @param {(cx: AsyncContext) => unknown} act
+   */
   button(t, id, label, enabled, primary, act) {
     const on = enabled && !this.sending;
     return h_flex()
@@ -556,7 +673,13 @@ export default class Tempo extends View {
       .child(this.sending && primary ? "Sending…" : label);
   }
 
+  /**
+   * @param {Theme} t
+   * @param {Entry} e
+   */
   entry(t, e) {
+    // Drawn only in detail(), while a question shows.
+    const open = /** @type {Open} */ (this.open);
     const who = e.author === "user" ? "You" : "Claude";
     return v_flex()
       .gap(2)
@@ -573,7 +696,7 @@ export default class Tempo extends View {
           .child(who)
           .child(localTime(e.created_at)),
       )
-      .child(rich(`entry-${this.open.project}-${this.open.number}-${e.id}`, entryText(e)));
+      .child(rich(`entry-${open.project}-${open.number}-${e.id}`, entryText(e)));
   }
 }
 
@@ -584,6 +707,11 @@ function panelShown() {
   return Boolean(panel) && !panel.hidden && find(root, "panel-body")?.active === PANEL;
 }
 
+/**
+ * @param {any} node a node of Herdr's layout tree
+ * @param {string} id
+ * @returns {any}
+ */
 function find(node, id) {
   if (node?.id === id) return node;
   for (const child of node?.children ?? []) {
@@ -624,12 +752,22 @@ async function findTempo() {
 }
 
 // Run tempo and read its JSON output.
+/**
+ * @param {string} path
+ * @param {string[]} args
+ * @param {string} cwd
+ * @returns {Promise<any>}
+ */
 async function tempo(path, args, cwd) {
   const r = await exec(path, args, { cwd, timeout: TEMPO_TIMEOUT_MS });
   if (r.code !== 0) throw new Error(r.stderr.trim() || `tempo ${args[0]} failed (${r.code})`);
   return JSON.parse(r.stdout);
 }
 
+/**
+ * @param {Theme} t
+ * @param {string} text
+ */
 function heading(t, text) {
   return div().px(2).pt(6).text_size(size(-1)).text_color(t.dim).truncate().child(text);
 }
