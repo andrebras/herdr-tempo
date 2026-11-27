@@ -99,8 +99,8 @@ bin/ci          # run every check, and load the mod in Herdr when herdr-app is i
 
 The unit tests cover the parts that do not need Herdr, which live in modules beside
 `mods/tempo/main.js`: the text the panel shows (`text.js`), which questions are new and how
-they group (`questions.js`), the commands it takes (`commands.js`) and how often it reads
-(`timing.js`).
+they group (`questions.js`), the commands it takes (`commands.js`), how often it reads (`timing.js`) and
+which read of the questions counts (`reads.js`).
 
 ## License
 

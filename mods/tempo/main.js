@@ -11,7 +11,7 @@
 // when you send.
 //
 // This file is the view and what talks to Herdr; what knows nothing about Herdr is in
-// modules beside it (text.js, questions.js, commands.js, timing.js), with tests.
+// modules beside it (text.js, questions.js, commands.js, timing.js, reads.js), with tests.
 
 import { View, div } from "gpui-kit";
 import { h_flex, Textarea, TextareaState, TextView, v_flex } from "gpui-base";
@@ -33,6 +33,7 @@ import {
 } from "herdr";
 import { parseCommand } from "./commands.js";
 import { goals, toasts, unannounced } from "./questions.js";
+import { Reads } from "./reads.js";
 import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
 import { FIND_MS, readEvery, REWATCH_MS, SHOWN_MS, SPACE_MS, TEMPO_TIMEOUT_MS } from "./timing.js";
 
@@ -75,9 +76,7 @@ export default class Tempo extends View {
     this.all = []; // every project's open questions
     this.mine = null; // the shown space's: { cwd, project, questions }
     this.error = null;
-    this.busy = false;
-    this.reads = 0; // reads started, so one that ends after a newer one is dropped
-    this.again = false; // a read was asked for while one ran
+    this.reads = new Reads(); // which read counts, and whether another is due
     this.switched = undefined; // the space switchSpace last read
     this.seen = new Map(); // each folder's last list, shown at once when you switch back
     this.last = 0;
@@ -182,12 +181,8 @@ export default class Tempo extends View {
   // timed: the timer asked, so a change found means the watch missed it.
   async refresh(cx, now = false, timed = false) {
     if (!this.tempo) return;
-    if (this.busy && !now) {
-      this.again = true;
-      return;
-    }
-    const read = ++this.reads;
-    this.busy = true;
+    const read = this.reads.start(now);
+    if (read === null) return;
     this.last = Date.now();
     const cwd = shownFolder();
     try {
@@ -196,7 +191,7 @@ export default class Tempo extends View {
         tempo(this.tempo, ["list", "--json", "--all-projects"], home()),
         cwd ? tempo(this.tempo, ["list", "--json"], cwd) : null,
       ]);
-      if (read !== this.reads) return;
+      if (!this.reads.current(read)) return;
       if (cwd) this.seen.set(cwd, mine);
       const moved = JSON.stringify(all) !== JSON.stringify(this.all);
       if (timed && moved && this.watching) this.missed = true;
@@ -218,18 +213,17 @@ export default class Tempo extends View {
       if (this.open) await this.follow(cx);
       if (changed) cx.notify();
     } catch (error) {
-      if (read !== this.reads) return;
+      if (!this.reads.current(read)) return;
       const text = `${friendly(error, "read the questions")} The panel tries again shortly.`;
       if (this.error !== text) {
         this.error = text;
         cx.notify();
       }
     } finally {
-      if (read === this.reads) this.busy = false;
+      this.reads.end(read);
     }
     // Asked again, or the space changed, while this ran: read now, not at the next tick.
-    if (this.again || shownFolder() !== cwd) {
-      this.again = false;
+    if (this.reads.again() || shownFolder() !== cwd) {
       cx.spawn((cx) => this.refresh(cx));
     }
   }

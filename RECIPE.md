@@ -92,8 +92,8 @@ while the panel is hidden.
 ## Built from
 
 - **Mod:** `mods/tempo/` with `main.js` (the view), the modules it imports that know
-  nothing about Herdr (`text.js`, `questions.js`, `commands.js`, `timing.js`), `icon.svg`
-  (the button's icon) and `mod.json`:
+  nothing about Herdr (`text.js`, `questions.js`, `commands.js`, `timing.js`,
+  `reads.js`), `icon.svg` (the button's icon) and `mod.json`:
   `place: "none"`, title "Tempo", `panel: {title: "Tempo", icon: "icon.svg"}`, and two
   palette entries in group "Tempo": "Show or hide Tempo" (`layout.toggle {id: "panel",
   stack: "panel-body", child: "panel-tempo"}`, words `questions sidebar panel`) and "Show
