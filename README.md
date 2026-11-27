@@ -72,10 +72,10 @@ bar shows and hides it.
 
 Herdr's command palette has two entries under Tempo:
 
-| Entry                       | What it does                                          |
-| --------------------------- | ----------------------------------------------------- |
-| Show or hide Tempo          | Shows or hides the panel.                             |
-| Show the next open question | Opens the project's first open question in the panel. |
+| Entry                   | What it does                                   |
+| ----------------------- | ---------------------------------------------- |
+| Show or hide Tempo      | Shows or hides the panel.                      |
+| Show the open questions | Shows the panel, and leaves it shown if it is. |
 
 ## Privacy and permissions
 
