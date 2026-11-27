@@ -129,3 +129,12 @@ test("an error with no text still says what failed", () => {
   assert.equal(friendly(new Error(""), "open the question"), "Tempo couldn't open the question.");
   assert.equal(friendly(new Error("No such project."), "open the question"), "Tempo couldn't open the question: No such project.");
 });
+
+const place = load("place");
+
+test("the header names the project, or the folder while it has no open question", () => {
+  assert.equal(place({ cwd: "/work/alpha/src", project: "alpha", questions: [] }), "alpha");
+  assert.equal(place({ cwd: "/work/alpha/src", project: null, questions: [] }), "src");
+  assert.equal(place({ cwd: "/work/beta/", project: null, questions: [] }), "beta");
+  assert.equal(place(null), "");
+});

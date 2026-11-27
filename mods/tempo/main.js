@@ -404,7 +404,8 @@ export default class Tempo extends View {
       .child(body);
   }
 
-  // As Files' header: back while a question shows, the name, and the project.
+  // As Files' header: back while a question shows, the name, and the project (the folder
+  // while it has no open question).
   header(t) {
     return h_flex()
       .h(42)
@@ -437,7 +438,7 @@ export default class Tempo extends View {
           .text_right()
           .text_size(size(-1))
           .text_color(t.dim)
-          .child(this.open ? `Q${this.open.number}` : (this.mine?.project ?? "")),
+          .child(this.open ? `Q${this.open.number}` : place(this.mine)),
       );
   }
 
@@ -739,6 +740,15 @@ function unannounced(all, mark) {
 function readEvery(watched, visible) {
   if (watched) return WATCHED_MS;
   return visible ? SHOWN_MS : HIDDEN_MS;
+}
+
+// Where the list is from: the project, named by its questions, or with none open the
+// shown folder's name. Only Tempo knows which project a folder belongs to (a git
+// checkout's top folder, or a name you gave it), so that's only a hint; for the header
+// alone, never compared with a question's project.
+function place(mine) {
+  if (mine?.project) return mine.project;
+  return (mine?.cwd ?? "").split("/").filter(Boolean).pop() ?? "";
 }
 
 // Questions by goal, keeping tempo's order; questions without a goal come last.
