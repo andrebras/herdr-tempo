@@ -38,6 +38,9 @@ const HIDDEN_MS = 30000;
 const WATCHED_MS = 60000;
 // How long to wait before watching again after a watch ended or couldn't start.
 const REWATCH_MS = 60000;
+// How often to look for the tempo command again while it's missing, so the panel works
+// once you install Tempo, without a restart.
+const FIND_MS = 30000;
 // How often to look for another shown space. Cheap (no program runs), and it keeps the count
 // on the Tempo button right while the panel is hidden, when it never draws.
 const SPACE_MS = 1000;
@@ -83,12 +86,20 @@ function lineBreaks(text) {
     });
 }
 
+// Shown while there's no tempo command. Tempo comes as a Claude Code plugin; its
+// /tempo:install, typed in Claude Code, puts the command in your terminal.
+const MISSING =
+  "The tempo command wasn't found. Install Tempo's plugin in Claude Code, then type /tempo:install " +
+  "in a Claude Code session to add the command (steps: github.com/andrebras/tempo#install). " +
+  "The panel finds it within a minute, with no restart.";
+
 // This mod's block in Herdr's side panel.
 const PANEL = "panel-tempo";
 export default class Tempo extends View {
   init(_props, cx) {
     this.tempo = null; // the tempo command's path, once found
     this.missing = false; // no tempo command on this machine
+    this.looked = 0; // when the tempo command was last looked for
     this.all = []; // every project's open questions
     this.mine = null; // the shown space's: { cwd, project, questions }
     this.error = null;
@@ -109,16 +120,12 @@ export default class Tempo extends View {
     this.note.set_auto_grow(3, 10);
     this.note.on("change", (_e, cx) => cx.notify());
     if (checking()) return;
-    cx.spawn(async (cx) => {
-      this.tempo = await findTempo();
-      this.missing = !this.tempo;
-      await this.refresh(cx);
-      if (this.tempo) await this.watch(cx);
-    });
+    cx.spawn((cx) => this.find(cx));
     cx.timer.every(SPACE_MS, (cx) => {
       if (this.tempo && shownFolder() !== (this.mine?.cwd ?? null)) this.switchSpace(cx);
     });
     cx.timer.every(SHOWN_MS, (cx) => {
+      if (this.missing && Date.now() - this.looked >= FIND_MS) cx.spawn((cx) => this.find(cx));
       if (this.tempo && !this.watching && Date.now() - this.watched >= REWATCH_MS) {
         cx.spawn((cx) => this.watch(cx));
       }
@@ -132,6 +139,16 @@ export default class Tempo extends View {
         cx.notify();
       }
     });
+  }
+
+  // Look for the tempo command; once found, read the questions and watch for changes.
+  async find(cx) {
+    this.looked = Date.now();
+    this.tempo = await findTempo();
+    this.missing = !this.tempo;
+    if (!this.tempo) return cx.notify();
+    await this.refresh(cx);
+    if (!this.watching) await this.watch(cx);
   }
 
   // "open": the shown project's first question; "open:N:project": that one.
@@ -446,7 +463,7 @@ export default class Tempo extends View {
   status(t, cwd, mine) {
     let text = null;
     if (checking()) text = "";
-    else if (this.missing) text = "The tempo command wasn't found. Install it with /tempo:install.";
+    else if (this.missing) text = MISSING;
     else if (this.error) text = this.error;
     else if (!this.tempo || !this.mine) text = cwd ? "Reading…" : "This space isn't on this computer.";
     else if (mine.length === 0) text = "No open questions here.";
