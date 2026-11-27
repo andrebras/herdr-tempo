@@ -21,6 +21,10 @@ export const TEMPO_TIMEOUT_MS = 15000;
 
 // How long to wait between timed reads: rarely while the watch reports every change,
 // else often while the window shows and less while it is hidden.
+/**
+ * @param {boolean} watched
+ * @param {boolean} visible
+ */
 export function readEvery(watched, visible) {
   if (watched) return WATCHED_MS;
   return visible ? SHOWN_MS : HIDDEN_MS;

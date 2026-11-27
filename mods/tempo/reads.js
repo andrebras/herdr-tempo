@@ -12,6 +12,7 @@ export class Reads {
   }
 
   // A new read's number, or null when one runs and this one waits (now: start anyway).
+  /** @returns {number | null} */
   start(now = false) {
     if (this.busy && !now) {
       this.asked = true;
@@ -22,11 +23,13 @@ export class Reads {
   }
 
   // Whether read is still the newest, so its lists count.
+  /** @param {number} read */
   current(read) {
     return read === this.count;
   }
 
   // read ended; only the newest one frees the way for the next.
+  /** @param {number} read */
   end(read) {
     if (read === this.count) this.busy = false;
   }

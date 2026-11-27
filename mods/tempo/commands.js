@@ -3,9 +3,13 @@
 
 // "open": the shown project's first question; "open:N:project": question N of project,
 // whose name may hold colons. null for any other command.
+/**
+ * @param {string} command
+ * @returns {{ name: "open", number: number | null, project: string | null } | null}
+ */
 export function parseCommand(command) {
   const [name, number, ...rest] = command.split(":");
   if (name !== "open") return null;
-  if (number) return { name, number: Number(number), project: rest.join(":") };
-  return { name, number: null, project: null };
+  if (number) return { name: "open", number: Number(number), project: rest.join(":") };
+  return { name: "open", number: null, project: null };
 }
