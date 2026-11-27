@@ -38,6 +38,8 @@ const SPACE_MS = 300;
 // The files a change to the questions touches: the database and its write-ahead log. Not
 // "-shm", which every read touches too, so a read would start the next one.
 const DATABASE = /\/questions\.db(-wal)?$/;
+// How long any tempo command may run before it's stopped and counts as failed.
+const TEMPO_TIMEOUT_MS = 15000;
 // The newest question already announced, shared so copies and reloads never repeat a toast.
 const ANNOUNCED = "tempo.announced";
 // The shown project's open-question count: Herdr shows it on the Tempo button while the
@@ -287,7 +289,10 @@ export default class Tempo extends View {
     const note = this.note.value().trim();
     // As one word, so a note that starts with a dash, such as --force, isn't read as an option.
     if (note) args.push(`--note=${note}`);
-    const r = await exec(this.tempo, args, { cwd: home() }).catch((e) => ({ code: 1, stderr: String(e) }));
+    const r = await exec(this.tempo, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
+      code: 1,
+      stderr: String(e),
+    }));
     this.sending = false;
     if (r.code === 0) {
       notify({ title: `Answered Q${number}`, body: `(${pick}) sent to Claude.`, level: "success", timeout: 3000 });
@@ -311,7 +316,10 @@ export default class Tempo extends View {
     cx.notify();
     // The text after --, so one that starts with a dash isn't read as an option.
     const args = ["reply", String(number), "--project", project, "--", body];
-    const r = await exec(this.tempo, args, { cwd: home() }).catch((e) => ({ code: 1, stderr: String(e) }));
+    const r = await exec(this.tempo, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
+      code: 1,
+      stderr: String(e),
+    }));
     this.sending = false;
     if (r.code === 0) {
       this.note.set_value("");
@@ -628,7 +636,7 @@ async function findTempo() {
 
 // Run tempo and read its JSON output.
 async function tempo(path, args, cwd) {
-  const r = await exec(path, args, { cwd, timeout: 15000 });
+  const r = await exec(path, args, { cwd, timeout: TEMPO_TIMEOUT_MS });
   if (r.code !== 0) throw new Error(r.stderr.trim() || `tempo ${args[0]} failed (${r.code})`);
   return JSON.parse(r.stdout);
 }
