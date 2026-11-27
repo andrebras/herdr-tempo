@@ -7,7 +7,7 @@
   },
   "palette": [
     {
-      "title": "Show or hide the questions",
+      "title": "Show or hide Tempo",
       "command": "layout.toggle",
       "args": {
         "id": "panel",
