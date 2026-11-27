@@ -94,3 +94,15 @@ test("new questions come oldest first, and the mark keeps only open ones", () =>
   );
   assert.deepEqual(keys, ["4:alpha", "5:beta"]);
 });
+
+const readEvery = load("readEvery", ["SHOWN_MS", "HIDDEN_MS", "WATCHED_MS"]);
+
+test("timed reads are rare while the watch reports every change", () => {
+  assert.equal(readEvery(true, true), 60000);
+  assert.equal(readEvery(true, false), 60000);
+});
+
+test("without a working watch, reads are often while the window shows", () => {
+  assert.equal(readEvery(false, true), 4000);
+  assert.equal(readEvery(false, false), 30000);
+});
