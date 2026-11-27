@@ -1,0 +1,17 @@
+#!/bin/sh
+# Every check a pull request must pass: lint and unit tests, and, when the Herdr app is
+# installed, a load of the mod (GitHub's CI can't run that one).
+set -eu
+cd "$(dirname "$0")/.."
+[ -d node_modules ] || { echo "Run npm ci first." >&2; exit 1; }
+npm run --silent lint
+npm test --silent
+if command -v herdr-app >/dev/null 2>&1; then
+  home=$(mktemp -d)
+  trap 'rm -rf "$home"' EXIT
+  mkdir -p "$home/mods"
+  cp -R mods/tempo "$home/mods/tempo"
+  HERDR_APP_HOME="$home" herdr-app check "$home/mods/tempo"
+else
+  echo "herdr-app not found: skipped loading the mod in Herdr." >&2
+fi
