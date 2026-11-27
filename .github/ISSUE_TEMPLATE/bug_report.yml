@@ -1,0 +1,73 @@
+name: Bug report
+description: Something in the Tempo panel does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Please search the existing issues first.
+        For a security problem, do not use this form: follow SECURITY.md instead.
+        Use invented projects, questions and paths (such as `acme-web` or `~/code/notes`) in what you paste.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong, in plain words.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What should have happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The steps that make the bug happen, one per line.
+      placeholder: |
+        1. Open a space in a project that has open questions.
+        2. Click the Tempo button in the tab bar.
+        3. Click the first question.
+    validations:
+      required: true
+  - type: input
+    id: mod-version
+    attributes:
+      label: Version of this mod
+      description: The release or the commit you installed from, if you know it.
+  - type: input
+    id: herdr-version
+    attributes:
+      label: Herdr version
+      description: The output of `herdr-app --version`, and whether it is the release from herdr.dev or a fork.
+    validations:
+      required: true
+  - type: input
+    id: tempo-version
+    attributes:
+      label: Tempo version
+      description: The Tempo release or commit you installed, if you know it.
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of herdr-app check
+      description: The output of `herdr-app check ~/.config/herdr-app/mods/tempo`.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots or other details that help. Use invented projects and questions in screenshots.
