@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# A newer push to a pull request cancels its older run. Runs on main are never cancelled, so
+# every merge is checked.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
@@ -26,5 +28,11 @@ jobs:
           node-version-file: .tool-versions
           cache: npm
       - run: npm ci
+      # Herdr reads the mod's mod.json. GitHub can't run `herdr-app check`, so at least make
+      # sure the file is valid JSON (JavaScript Object Notation) and holds an object.
+      - name: Validate mod.json
+        run: >-
+          node -e 'const m = JSON.parse(require("fs").readFileSync("mods/tempo/mod.json", "utf8"));
+          if (!m || typeof m !== "object" || Array.isArray(m)) throw new Error("mod.json is not an object");'
       - run: npm run lint
       - run: npm test
