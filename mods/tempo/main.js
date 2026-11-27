@@ -582,7 +582,7 @@ export default class Tempo extends View {
           .text_size(size(-1))
           .text_color(t.dim)
           .child(who)
-          .child(e.created_at.slice(0, 16).replace("T", " ")),
+          .child(localTime(e.created_at)),
       )
       .child(rich(`entry-${this.open.project}-${this.open.number}-${e.id}`, what));
   }
@@ -639,6 +639,17 @@ async function tempo(path, args, cwd) {
   const r = await exec(path, args, { cwd, timeout: TEMPO_TIMEOUT_MS });
   if (r.code !== 0) throw new Error(r.stderr.trim() || `tempo ${args[0]} failed (${r.code})`);
   return JSON.parse(r.stdout);
+}
+
+// Tempo's times are UTC ("2026-01-31T09:05:00Z"); shown in this computer's time zone, as
+// Tempo's page shows them: "2026-01-31 10:05" one hour east of UTC. Text that isn't a
+// time shows as it is.
+function localTime(stamp) {
+  const at = new Date(stamp);
+  if (Number.isNaN(at.getTime())) return String(stamp ?? "");
+  const two = (n) => String(n).padStart(2, "0");
+  const day = `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}`;
+  return `${day} ${two(at.getHours())}:${two(at.getMinutes())}`;
 }
 
 // Questions by goal, keeping tempo's order; questions without a goal come last.

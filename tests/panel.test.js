@@ -6,6 +6,9 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { test } = require("node:test");
 
+// A zone east of UTC, so a time shown in UTC can't pass for local time.
+process.env.TZ = "Asia/Kolkata";
+
 const source = readFileSync(join(__dirname, "..", "mods", "tempo", "main.js"), "utf8");
 
 // The top-level `const NAME = …;` or `function NAME(…) { … }` called name, as source.
@@ -23,6 +26,7 @@ function load(name, needs = []) {
 }
 
 const lineBreaks = load("lineBreaks", ["LIST_LINE"]);
+const localTime = load("localTime");
 
 test("a single line break stays a new line, as on the page", () => {
   assert.equal(lineBreaks("one\ntwo"), "one  \ntwo");
@@ -46,4 +50,14 @@ test("no text gives an empty string", () => {
   assert.equal(lineBreaks(null), "");
   assert.equal(lineBreaks(undefined), "");
   assert.equal(lineBreaks(""), "");
+});
+
+test("a thread time shows in the local time zone, not in UTC", () => {
+  assert.equal(localTime("2026-01-31T09:05:00Z"), "2026-01-31 14:35");
+  assert.equal(localTime("2026-01-31T20:00:00Z"), "2026-02-01 01:30");
+});
+
+test("text that isn't a time shows as it is", () => {
+  assert.equal(localTime("soon"), "soon");
+  assert.equal(localTime(undefined), "");
 });
