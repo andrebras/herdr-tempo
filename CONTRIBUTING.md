@@ -42,11 +42,12 @@ To try your change in Herdr, copy `mods/tempo` into `~/.config/herdr-app/mods/` 
 
 ## Checks
 
-| Command        | What it does                                                                |
-| -------------- | --------------------------------------------------------------------------- |
-| `npm test`     | Runs the unit tests.                                                        |
-| `npm run lint` | Checks the code for common mistakes, with Biome.                            |
-| `bin/ci`       | Runs the lint and the tests, and `herdr-app check` when Herdr is installed. |
+| Command             | What it does                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| `npm test`          | Runs the unit tests.                                                                   |
+| `npm run lint`      | Checks the code for common mistakes, with Biome.                                       |
+| `npm run typecheck` | Checks the types (written as JSDoc comments) of the modules beside `main.js`.          |
+| `bin/ci`            | Runs the lint, the types and the tests, and `herdr-app check` when Herdr is installed. |
 
 `herdr-app check` loads the mod in Herdr and reports any error. `bin/ci` runs it with a
 temporary Herdr folder, so your own setup is not touched.
