@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/andrebras/herdr-tempo/security/policy
+    about: Please report security problems privately, as SECURITY.md explains. Do not open a public issue.
+  - name: A problem with the tempo command
+    url: https://github.com/andrebras/tempo/issues
+    about: Problems in Tempo itself, outside this panel, belong to the Tempo repository.
