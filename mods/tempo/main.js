@@ -38,8 +38,12 @@ const SPACE_MS = 300;
 // The files a change to the questions touches: the database and its write-ahead log. Not
 // "-shm", which every read touches too, so a read would start the next one.
 const DATABASE = /\/questions\.db(-wal)?$/;
-// The newest question already announced, shared so copies and reloads never repeat a toast.
+// How long any tempo command may run before it's stopped and counts as failed.
+const TEMPO_TIMEOUT_MS = 15000;
+// The open questions already announced, as "number:project", shared so copies and reloads
+// never repeat a toast. The newest few get a toast each; one more toast counts the rest.
 const ANNOUNCED = "tempo.announced";
+const TOASTS = 3;
 // The shown project's open-question count: Herdr shows it on the Tempo button while the
 // panel is hidden.
 const BADGE = "tempo.badge";
@@ -226,31 +230,37 @@ export default class Tempo extends View {
     }
   }
 
-  // Toast the questions asked since the last toast; the first read only sets the mark.
+  // Toast the questions not announced before; the first read only sets the mark.
   announce(all) {
-    const newest = all.reduce((max, q) => (q.created_at > max ? q.created_at : max), "");
-    const mark = shared(ANNOUNCED);
-    if (typeof mark === "string") {
-      const fresh = all.filter((q) => q.created_at > mark);
-      // Every project's new questions are announced, but only the shown project's open
-      // here when clicked: the panel shows that project alone. A command reaches the
-      // panel only while it shows, so a hidden one is shown instead.
-      const shown = panelShown();
-      for (const q of fresh.slice(-3)) {
-        const here = q.project === this.mine?.project;
-        const action = shown
-          ? { name: `tempo.open:${q.number}:${q.project}` }
-          : { name: "layout.select", args: { stack: "panel-body", child: PANEL, show: true } };
-        notify({
-          title: `Tempo: ${q.label} in ${q.project}`,
-          body: q.title,
-          level: "info",
-          timeout: 8000,
-          ...(here ? { action } : {}),
-        });
-      }
+    const { fresh, keys } = unannounced(all, shared(ANNOUNCED));
+    // Every project's new questions are announced, but only the shown project's open
+    // here when clicked: the panel shows that project alone. A command reaches the
+    // panel only while it shows, so a hidden one is shown instead.
+    const shown = panelShown();
+    const reveal = { name: "layout.select", args: { stack: "panel-body", child: PANEL, show: true } };
+    for (const q of fresh.slice(-TOASTS)) {
+      const here = q.project === this.mine?.project;
+      const action = shown ? { name: `tempo.open:${q.number}:${q.project}` } : reveal;
+      notify({
+        title: `Tempo: ${q.label} in ${q.project}`,
+        body: q.title,
+        level: "info",
+        timeout: 8000,
+        ...(here ? { action } : {}),
+      });
     }
-    if (newest && (typeof mark !== "string" || newest > mark)) setShared(ANNOUNCED, newest);
+    const more = fresh.length - TOASTS;
+    if (more > 0) {
+      notify({
+        title: `Tempo: and ${more} more new question${more === 1 ? "" : "s"}`,
+        body: "The Tempo panel lists the shown project's questions.",
+        level: "info",
+        timeout: 8000,
+        ...(shown ? {} : { action: reveal }),
+      });
+    }
+    const mark = shared(ANNOUNCED);
+    if (!Array.isArray(mark) || mark.join("\n") !== keys.join("\n")) setShared(ANNOUNCED, keys);
   }
 
   async show(project, number, cx) {
@@ -287,7 +297,10 @@ export default class Tempo extends View {
     const note = this.note.value().trim();
     // As one word, so a note that starts with a dash, such as --force, isn't read as an option.
     if (note) args.push(`--note=${note}`);
-    const r = await exec(this.tempo, args, { cwd: home() }).catch((e) => ({ code: 1, stderr: String(e) }));
+    const r = await exec(this.tempo, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
+      code: 1,
+      stderr: String(e),
+    }));
     this.sending = false;
     if (r.code === 0) {
       notify({ title: `Answered Q${number}`, body: `(${pick}) sent to Claude.`, level: "success", timeout: 3000 });
@@ -311,7 +324,10 @@ export default class Tempo extends View {
     cx.notify();
     // The text after --, so one that starts with a dash isn't read as an option.
     const args = ["reply", String(number), "--project", project, "--", body];
-    const r = await exec(this.tempo, args, { cwd: home() }).catch((e) => ({ code: 1, stderr: String(e) }));
+    const r = await exec(this.tempo, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
+      code: 1,
+      stderr: String(e),
+    }));
     this.sending = false;
     if (r.code === 0) {
       this.note.set_value("");
@@ -574,7 +590,7 @@ export default class Tempo extends View {
           .text_size(size(-1))
           .text_color(t.dim)
           .child(who)
-          .child(e.created_at.slice(0, 16).replace("T", " ")),
+          .child(localTime(e.created_at)),
       )
       .child(rich(`entry-${this.open.project}-${this.open.number}-${e.id}`, what));
   }
@@ -628,9 +644,36 @@ async function findTempo() {
 
 // Run tempo and read its JSON output.
 async function tempo(path, args, cwd) {
-  const r = await exec(path, args, { cwd, timeout: 15000 });
+  const r = await exec(path, args, { cwd, timeout: TEMPO_TIMEOUT_MS });
   if (r.code !== 0) throw new Error(r.stderr.trim() || `tempo ${args[0]} failed (${r.code})`);
   return JSON.parse(r.stdout);
+}
+
+// Tempo's times are UTC ("2026-01-31T09:05:00Z"); shown in this computer's time zone, as
+// Tempo's page shows them: "2026-01-31 10:05" one hour east of UTC. Text that isn't a
+// time shows as it is.
+function localTime(stamp) {
+  const at = new Date(stamp);
+  if (Number.isNaN(at.getTime())) return String(stamp ?? "");
+  const two = (n) => String(n).padStart(2, "0");
+  const day = `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}`;
+  return `${day} ${two(at.getHours())}:${two(at.getMinutes())}`;
+}
+
+// The questions of all (every open one) not in mark, oldest first, and the mark to keep:
+// every open question, so it never grows past them. A question is its project and
+// number: two asked in the same second are both new. A mark that isn't a list (the first
+// read, or the newest time an older panel kept) announces nothing, so no old question
+// toasts after an update.
+function unannounced(all, mark) {
+  const key = (q) => `${q.number}:${q.project}`;
+  const keys = all.map(key).sort();
+  if (!Array.isArray(mark)) return { fresh: [], keys };
+  const known = new Set(mark);
+  const fresh = all
+    .filter((q) => !known.has(key(q)))
+    .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+  return { fresh, keys };
 }
 
 // Questions by goal, keeping tempo's order; questions without a goal come last.
