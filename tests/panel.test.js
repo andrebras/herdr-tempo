@@ -1,15 +1,28 @@
-// Tests for the panel's lineBreaks(), run with `node --test`. The panel imports
-// Herdr's own modules, which only exist inside Herdr, so this reads lineBreaks() and the
-// pattern it uses out of the panel's source and runs just those.
+// Tests for the panel's pure functions, run with `node --test`. The panel imports
+// Herdr's own modules, which only exist inside Herdr, so this reads each function (and
+// the constants it uses) out of the panel's source and runs just those.
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { test } = require("node:test");
 
 const source = readFileSync(join(__dirname, "..", "mods", "tempo", "main.js"), "utf8");
-const code = source.match(/\nconst LIST_LINE = [\s\S]*?\nfunction lineBreaks\([\s\S]*?\n}\n/);
-assert.ok(code, "main.js has LIST_LINE and lineBreaks()");
-const lineBreaks = new Function(`${code[0]}\nreturn lineBreaks;`)();
+
+// The top-level `const NAME = …;` or `function NAME(…) { … }` called name, as source.
+function part(name) {
+  const found =
+    source.match(new RegExp(`\\nconst ${name} = [^\\n]*\\n`)) ??
+    source.match(new RegExp(`\\n(async )?function ${name}\\([\\s\\S]*?\\n}\\n`));
+  assert.ok(found, `main.js has ${name}`);
+  return found[0];
+}
+
+// The function called name, with the parts it needs defined before it.
+function load(name, needs = []) {
+  return new Function(`${[...needs, name].map(part).join("\n")}\nreturn ${name};`)();
+}
+
+const lineBreaks = load("lineBreaks", ["LIST_LINE"]);
 
 test("a single line break stays a new line, as on the page", () => {
   assert.equal(lineBreaks("one\ntwo"), "one  \ntwo");
