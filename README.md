@@ -97,8 +97,10 @@ npm run lint    # check the code with Biome
 bin/ci          # run every check, and load the mod in Herdr when herdr-app is installed
 ```
 
-The unit tests cover the part that does not need Herdr: how the panel turns a question's
-text into Markdown (`lineBreaks()` in `mods/tempo/main.js`).
+The unit tests cover the parts that do not need Herdr, which live in modules beside
+`mods/tempo/main.js`: the text the panel shows (`text.js`), which questions are new and how
+they group (`questions.js`), the commands it takes (`commands.js`) and how often it reads
+(`timing.js`).
 
 ## License
 
