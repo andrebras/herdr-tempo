@@ -117,11 +117,6 @@ while the panel is hidden.
 - **The `panel` key exists only in a fork of Herdr**
   ([andrebras/herdr-app](https://github.com/andrebras/herdr-app)). On the Herdr released at
   herdr.dev the panel does not appear.
-- **Thread times** are Tempo's UTC (Coordinated Universal Time) stamps with the `Z`
-  dropped, not local time.
-- **Notices** compare `created_at` at one-second precision, so a question made in the same
-  second as the last one announced gets none. More than three new ones show only the last
-  three.
 - **Watch only** `questions.db` and `questions.db-wal`. Every read touches `-shm`, so
   watching it starts a read after every read.
 - **Compare with `?? null`:** with no shown space, `undefined` and `null` must not count as
