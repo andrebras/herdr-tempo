@@ -245,7 +245,7 @@ export default class Tempo extends View {
     const last = cwd ? this.seen.get(cwd) : undefined;
     if (cwd && last) {
       this.mine = { cwd, questions: last, project: last[0]?.project ?? null };
-      if (shared(BADGE) !== last.length) setShared(BADGE, last.length);
+      showCount(last.length);
     }
     // The panel shows the shown space's project alone: a question of another one closes.
     if (this.open && this.open.project !== (last?.[0]?.project ?? null)) this.open = null;
@@ -285,7 +285,7 @@ export default class Tempo extends View {
       // the toast's click needs it.
       this.announce(all);
       const count = mine?.length ?? 0;
-      if (shared(BADGE) !== count) setShared(BADGE, count);
+      showCount(count);
       if (this.open && this.open.project !== this.mine?.project) this.open = null;
       this.error = null;
       if (this.open) await this.follow(cx);
@@ -311,13 +311,22 @@ export default class Tempo extends View {
   async follow(cx) {
     // Called only while a question shows.
     const { project, number, question } = /** @type {Open} */ (this.open);
-    const now = this.all.find((q) => q.project === project && q.number === number);
+    const now = this.listed(project, number);
     if (!now) {
       this.open = null;
       cx.notify();
     } else if (now.updated_at !== question?.updated_at || now.waiting !== question?.waiting) {
       await this.load(cx);
     }
+  }
+
+  // The question in every project's list, if it is still open there.
+  /**
+   * @param {string} project
+   * @param {number | undefined} number
+   */
+  listed(project, number) {
+    return this.all.find((q) => q.project === project && q.number === number);
   }
 
   // Toast the questions not announced before; the first read only sets the mark.
@@ -348,7 +357,7 @@ export default class Tempo extends View {
     if (!this.tempo || !project) return;
     try {
       const question = await tempo(this.tempo, ["show", String(number), "--json", "--project", project], home());
-      const list = this.all.find((q) => q.project === project && q.number === number);
+      const list = this.listed(project, number);
       if (this.open?.project === project && this.open.number === number) {
         // waiting comes from the list: show --json doesn't carry it.
         this.open.question = { ...question, waiting: list?.waiting ?? null };
@@ -710,6 +719,13 @@ export default class Tempo extends View {
       .child(h_flex().gap(6).text_size(size(-1)).text_color(t.dim).child(who).child(localTime(e.created_at)))
       .child(rich(`entry-${open.project}-${open.number}-${e.id}`, entryText(e)));
   }
+}
+
+// The count on the Tempo button. Set only when it changes: setting shared state redraws
+// every mod.
+/** @param {number} count */
+function showCount(count) {
+  if (shared(BADGE) !== count) setShared(BADGE, count);
 }
 
 // Whether Herdr's side panel shows this mod now.
