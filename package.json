@@ -17,7 +17,7 @@
     "typecheck": "tsc -p tsconfig.json && bin/typecheck-herdr"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.9",
     "typescript": "7.0.2"
   }
 }
