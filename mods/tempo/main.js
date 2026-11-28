@@ -486,10 +486,7 @@ export default class Tempo extends View {
       .gap(2)
       .children([
         ...this.status(t, cwd, mine),
-        ...goals(mine).flatMap(([goal, qs]) => [
-          ...(goal ? [heading(t, goal)] : []),
-          ...qs.map((q) => this.row(t, q)),
-        ]),
+        ...goals(mine).flatMap(([goal, qs]) => [...(goal ? [heading(t, goal)] : []), ...qs.map((q) => this.row(t, q))]),
       ]);
   }
 
@@ -525,7 +522,14 @@ export default class Tempo extends View {
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
       .on_click((_e, cx) => cx.spawn((cx) => this.show(q.project, q.number, cx)))
-      .child(div().flex_none().min_w(34).whitespace_nowrap().text_color(q.waiting ? t.working : t.accent).child(q.label))
+      .child(
+        div()
+          .flex_none()
+          .min_w(34)
+          .whitespace_nowrap()
+          .text_color(q.waiting ? t.working : t.accent)
+          .child(q.label),
+      )
       .child(div().flex_1().min_w(0).child(q.title));
   }
 
@@ -548,7 +552,13 @@ export default class Tempo extends View {
               .text_size(size(-1))
               .text_color(t.dim)
               .child(div().text_color(t.accent).child(q.label))
-              .when(Boolean(q.goal), (el) => el.child(div().truncate().child(q.goal ?? ""))),
+              .when(Boolean(q.goal), (el) =>
+                el.child(
+                  div()
+                    .truncate()
+                    .child(q.goal ?? ""),
+                ),
+              ),
           )
           .child(div().text_size(size(2)).font_semibold().child(q.title)),
       )
@@ -564,11 +574,7 @@ export default class Tempo extends View {
             .child("Waiting on Claude to answer your follow-up."),
         ),
       )
-      .child(
-        rich(`ctx-${q.project}-${q.number}-${q.version}`, q.context)
-          .text_size(size(1))
-          .text_color(t.foreground),
-      )
+      .child(rich(`ctx-${q.project}-${q.number}-${q.version}`, q.context).text_size(size(1)).text_color(t.foreground))
       .child(
         v_flex()
           .gap(4)
@@ -688,14 +694,7 @@ export default class Tempo extends View {
       .rounded(6)
       .bg(t.surface)
       .text_size(size(0))
-      .child(
-        h_flex()
-          .gap(6)
-          .text_size(size(-1))
-          .text_color(t.dim)
-          .child(who)
-          .child(localTime(e.created_at)),
-      )
+      .child(h_flex().gap(6).text_size(size(-1)).text_color(t.dim).child(who).child(localTime(e.created_at)))
       .child(rich(`entry-${open.project}-${open.number}-${e.id}`, entryText(e)));
   }
 }
