@@ -35,7 +35,16 @@ import { parseCommand } from "./commands.js";
 import { goals, toasts, unannounced } from "./questions.js";
 import { Reads } from "./reads.js";
 import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
-import { FIND_MS, readEvery, REWATCH_MS, SHOWN_MS, SPACE_MS, TEMPO_TIMEOUT_MS } from "./timing.js";
+import {
+  BRIEF_TOAST_MS,
+  DUE_SLACK_MS,
+  FIND_MS,
+  readEvery,
+  REWATCH_MS,
+  SHOWN_MS,
+  SPACE_MS,
+  TEMPO_TIMEOUT_MS,
+} from "./timing.js";
 
 /** @typedef {import("gpui-kit").AsyncContext} AsyncContext */
 /** @typedef {import("gpui-kit").Context} Context */
@@ -162,7 +171,7 @@ export default class Tempo extends View {
         cx.spawn((cx) => this.watch(cx));
       }
       const wait = readEvery(this.watching && !this.missed, window()?.visible !== false);
-      if (Date.now() - this.last >= wait - 100) cx.spawn((cx) => this.refresh(cx, false, true));
+      if (Date.now() - this.last >= wait - DUE_SLACK_MS) cx.spawn((cx) => this.refresh(cx, false, true));
     });
     cx.spawn(async (cx) => {
       for (;;) {
@@ -195,7 +204,7 @@ export default class Tempo extends View {
     if (parsed.number !== null) return this.show(parsed.project, parsed.number, cx);
     const first = this.mine?.questions[0];
     if (first) return this.show(first.project, first.number, cx);
-    notify({ title: "Tempo", body: "No open questions.", level: "info", timeout: 3000 });
+    notify({ title: "Tempo", body: "No open questions.", level: "info", timeout: BRIEF_TOAST_MS });
   }
 
   // Read the questions again as soon as Tempo's database changes, so the count on the
@@ -236,7 +245,7 @@ export default class Tempo extends View {
     const last = cwd ? this.seen.get(cwd) : undefined;
     if (cwd && last) {
       this.mine = { cwd, questions: last, project: last[0]?.project ?? null };
-      if (shared(BADGE) !== last.length) setShared(BADGE, last.length);
+      showCount(last.length);
     }
     // The panel shows the shown space's project alone: a question of another one closes.
     if (this.open && this.open.project !== (last?.[0]?.project ?? null)) this.open = null;
@@ -276,7 +285,7 @@ export default class Tempo extends View {
       // the toast's click needs it.
       this.announce(all);
       const count = mine?.length ?? 0;
-      if (shared(BADGE) !== count) setShared(BADGE, count);
+      showCount(count);
       if (this.open && this.open.project !== this.mine?.project) this.open = null;
       this.error = null;
       if (this.open) await this.follow(cx);
@@ -302,13 +311,22 @@ export default class Tempo extends View {
   async follow(cx) {
     // Called only while a question shows.
     const { project, number, question } = /** @type {Open} */ (this.open);
-    const now = this.all.find((q) => q.project === project && q.number === number);
+    const now = this.listed(project, number);
     if (!now) {
       this.open = null;
       cx.notify();
     } else if (now.updated_at !== question?.updated_at || now.waiting !== question?.waiting) {
       await this.load(cx);
     }
+  }
+
+  // The question in every project's list, if it is still open there.
+  /**
+   * @param {string} project
+   * @param {number | undefined} number
+   */
+  listed(project, number) {
+    return this.all.find((q) => q.project === project && q.number === number);
   }
 
   // Toast the questions not announced before; the first read only sets the mark.
@@ -339,7 +357,7 @@ export default class Tempo extends View {
     if (!this.tempo || !project) return;
     try {
       const question = await tempo(this.tempo, ["show", String(number), "--json", "--project", project], home());
-      const list = this.all.find((q) => q.project === project && q.number === number);
+      const list = this.listed(project, number);
       if (this.open?.project === project && this.open.number === number) {
         // waiting comes from the list: show --json doesn't carry it.
         this.open.question = { ...question, waiting: list?.waiting ?? null };
@@ -356,28 +374,22 @@ export default class Tempo extends View {
   async send(cx) {
     const { project, number, pick } = this.open ?? {};
     if (!pick || !project || this.sending) return;
-    this.sending = true;
-    cx.notify();
     const args = ["answer", String(number), pick, "--project", project];
     const note = this.note.value().trim();
     // As one word, so a note that starts with a dash, such as --force, isn't read as an option.
     if (note) args.push(`--note=${note}`);
-    // A question shows only once the tempo command was found.
-    const path = /** @type {string} */ (this.tempo);
-    const r = await exec(path, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
-      code: 1,
-      stderr: String(e),
-    }));
-    this.sending = false;
-    if (r.code === 0) {
-      notify({ title: `Answered Q${number}`, body: `(${pick}) sent to Claude.`, level: "success", timeout: 3000 });
+    if (await this.deliver(cx, args, "The answer wasn't saved.")) {
+      notify({
+        title: `Answered Q${number}`,
+        body: `(${pick}) sent to Claude.`,
+        level: "success",
+        timeout: BRIEF_TOAST_MS,
+      });
       // On to the project's next open question, as the page does; the list when none is left.
       this.open = null;
       await this.refresh(cx, true);
       const next = this.mine?.questions.find((q) => q.project === project && q.number !== number);
       if (next) await this.show(next.project, next.number, cx);
-    } else {
-      notify({ title: "Tempo", body: r.stderr.trim() || "The answer wasn't saved.", level: "error" });
     }
     cx.notify();
   }
@@ -388,10 +400,26 @@ export default class Tempo extends View {
     const body = this.note.value().trim();
     const { project, number } = this.open ?? {};
     if (!body || !project || this.sending) return;
-    this.sending = true;
-    cx.notify();
     // The text after --, so one that starts with a dash isn't read as an option.
     const args = ["reply", String(number), "--project", project, "--", body];
+    if (await this.deliver(cx, args, "The follow-up wasn't saved.")) {
+      this.note.set_value("");
+      await this.refresh(cx, true);
+      await this.load(cx);
+    }
+    cx.notify();
+  }
+
+  // Run what the person sent (tempo answer or tempo reply), with both buttons off while it
+  // runs. True when it worked; else a toast says why, with failed when tempo doesn't.
+  /**
+   * @param {AsyncContext} cx
+   * @param {string[]} args
+   * @param {string} failed
+   */
+  async deliver(cx, args, failed) {
+    this.sending = true;
+    cx.notify();
     // A question shows only once the tempo command was found.
     const path = /** @type {string} */ (this.tempo);
     const r = await exec(path, args, { cwd: home(), timeout: TEMPO_TIMEOUT_MS }).catch((e) => ({
@@ -399,14 +427,8 @@ export default class Tempo extends View {
       stderr: String(e),
     }));
     this.sending = false;
-    if (r.code === 0) {
-      this.note.set_value("");
-      await this.refresh(cx, true);
-      await this.load(cx);
-    } else {
-      notify({ title: "Tempo", body: r.stderr.trim() || "The follow-up wasn't saved.", level: "error" });
-    }
-    cx.notify();
+    if (r.code !== 0) notify({ title: "Tempo", body: r.stderr.trim() || failed, level: "error" });
+    return r.code === 0;
   }
 
   /** @param {Context} cx */
@@ -697,6 +719,13 @@ export default class Tempo extends View {
       .child(h_flex().gap(6).text_size(size(-1)).text_color(t.dim).child(who).child(localTime(e.created_at)))
       .child(rich(`entry-${open.project}-${open.number}-${e.id}`, entryText(e)));
   }
+}
+
+// The count on the Tempo button. Set only when it changes: setting shared state redraws
+// every mod.
+/** @param {number} count */
+function showCount(count) {
+  if (shared(BADGE) !== count) setShared(BADGE, count);
 }
 
 // Whether Herdr's side panel shows this mod now.
