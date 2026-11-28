@@ -41,7 +41,9 @@ test("text that isn't a time shows as it is", () => {
 });
 
 test("an error says what failed, with Tempo's own last line", () => {
-  const error = new Error("Traceback (most recent call last):\n  File x\nsqlite3.OperationalError: database is locked\n");
+  const error = new Error(
+    "Traceback (most recent call last):\n  File x\nsqlite3.OperationalError: database is locked\n",
+  );
   assert.equal(
     friendly(error, "read the questions"),
     "Tempo couldn't read the questions: sqlite3.OperationalError: database is locked.",
@@ -58,7 +60,10 @@ test("a timeout and output that isn't JSON are put in words", () => {
 
 test("an error with no text still says what failed", () => {
   assert.equal(friendly(new Error(""), "open the question"), "Tempo couldn't open the question.");
-  assert.equal(friendly(new Error("No such project."), "open the question"), "Tempo couldn't open the question: No such project.");
+  assert.equal(
+    friendly(new Error("No such project."), "open the question"),
+    "Tempo couldn't open the question: No such project.",
+  );
 });
 
 test("the header names the project, or the folder while it has no open question", () => {

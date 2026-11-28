@@ -45,7 +45,12 @@ export function friendly(error, what) {
   if (error instanceof SyntaxError) {
     return `Tempo couldn't ${what}: its answer wasn't the JSON the panel expects. Is Tempo up to date?`;
   }
-  const last = (text.split("\n").filter((line) => line.trim()).pop() ?? "").trim();
+  const last = (
+    text
+      .split("\n")
+      .filter((line) => line.trim())
+      .pop() ?? ""
+  ).trim();
   if (!last) return `Tempo couldn't ${what}.`;
   return `Tempo couldn't ${what}: ${last}${/[.!?]$/.test(last) ? "" : "."}`;
 }
