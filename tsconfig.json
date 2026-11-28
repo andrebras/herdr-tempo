@@ -1,0 +1,20 @@
+{
+  "// why": "Type-checks the modules that know nothing about Herdr, so it runs everywhere, GitHub's CI included. The types are JSDoc comments in the .js files, so the mod runs as it is, with no build step.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "noEmit": true
+  },
+  "files": [
+    "mods/tempo/text.js",
+    "mods/tempo/questions.js",
+    "mods/tempo/commands.js",
+    "mods/tempo/timing.js",
+    "mods/tempo/reads.js"
+  ]
+}

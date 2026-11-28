@@ -91,10 +91,11 @@ Herdr's command palette has two entries under Tempo:
 You need Node.js 22.13 or newer. The exact version is pinned in `.tool-versions`.
 
 ```sh
-npm ci          # install the development tools
-npm test        # run the unit tests
-npm run lint    # check the code with Biome
-bin/ci          # run every check, and load the mod in Herdr when herdr-app is installed
+npm ci             # install the development tools
+npm test           # run the unit tests
+npm run lint       # check the code with Biome
+npm run typecheck  # check the types of the modules beside main.js
+bin/ci             # run every check, and load the mod in Herdr when herdr-app is installed
 ```
 
 The unit tests cover the parts that do not need Herdr, which live in modules beside
