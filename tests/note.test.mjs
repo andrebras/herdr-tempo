@@ -1,7 +1,7 @@
 // Tests for note.js: what Cmd+Enter in the note box sends.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { submitAction, withoutTypedBreak } from "../mods/tempo/note.js";
+import { leftNotice, submitAction, withoutTypedBreak } from "../mods/tempo/note.js";
 
 test("with an option picked, Cmd+Enter sends the answer, note or not", () => {
   assert.equal(submitAction({ pick: "b", note: "", sending: false }), "answer");
@@ -32,4 +32,23 @@ test("no break just before the cursor leaves the text alone", () => {
   assert.equal(withoutTypedBreak("Nicer view", 10), null);
   assert.equal(withoutTypedBreak("one\ntwo", 7), null);
   assert.equal(withoutTypedBreak("", 0), null);
+});
+
+test("a question answered or archived elsewhere says so, and that the note is kept", () => {
+  assert.equal(
+    leftNotice(12, "answered"),
+    "Q12 was answered elsewhere, so it is no longer open. Your note is still here to copy.",
+  );
+  assert.equal(
+    leftNotice(3, "archived"),
+    "Q3 was archived elsewhere, so it is no longer open. Your note is still here to copy.",
+  );
+});
+
+test("a question Tempo can't say more about is no longer here", () => {
+  assert.equal(leftNotice(4, null), "Q4 is no longer here, so it is no longer open. Your note is still here to copy.");
+  assert.equal(
+    leftNotice(4, "open"),
+    "Q4 is no longer here, so it is no longer open. Your note is still here to copy.",
+  );
 });
