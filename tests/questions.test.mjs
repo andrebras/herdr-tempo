@@ -1,7 +1,7 @@
 // Tests for questions.js: which questions are new, and how the list groups them.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { unannounced } from "../mods/tempo/questions.js";
+import { goals, TOASTS, toasts, unannounced } from "../mods/tempo/questions.js";
 
 const q = (number, project, created_at = "2026-01-31T09:05:00Z") => ({ number, project, created_at });
 
@@ -33,4 +33,62 @@ test("new questions come oldest first, and the mark keeps only open ones", () =>
     [5, 4],
   );
   assert.deepEqual(keys, ["4:alpha", "5:beta"]);
+});
+
+const reveal = { name: "layout.select", args: { child: "panel-tempo", show: true } };
+const fresh = (n, project = "alpha") =>
+  Array.from({ length: n }, (_, i) => ({ number: i + 1, project, label: `Q${i + 1}`, title: `Title ${i + 1}` }));
+
+test("a new question of the shown project opens it when the panel shows", () => {
+  const [toast] = toasts(fresh(1), { project: "alpha", shown: true, reveal });
+  assert.deepEqual(toast, {
+    title: "Tempo: Q1 in alpha",
+    body: "Title 1",
+    level: "info",
+    timeout: 8000,
+    action: { name: "tempo.open:1:alpha" },
+  });
+});
+
+test("while the panel is hidden, a click shows it instead", () => {
+  const [toast] = toasts(fresh(1), { project: "alpha", shown: false, reveal });
+  assert.deepEqual(toast.action, reveal);
+});
+
+test("another project's question toasts with no click", () => {
+  const [toast] = toasts(fresh(1, "beta"), { project: "alpha", shown: true, reveal });
+  assert.equal(toast.title, "Tempo: Q1 in beta");
+  assert.equal("action" in toast, false);
+});
+
+test("the newest few toast each, and one more counts the rest", () => {
+  const list = toasts(fresh(TOASTS + 2), { project: "alpha", shown: true, reveal });
+  assert.equal(list.length, TOASTS + 1);
+  assert.deepEqual(
+    list.slice(0, TOASTS).map((t) => t.body),
+    ["Title 3", "Title 4", "Title 5"],
+  );
+  assert.equal(list[TOASTS].title, "Tempo: and 2 more new questions");
+  assert.equal("action" in list[TOASTS], false);
+  const one = toasts(fresh(TOASTS + 1), { project: "alpha", shown: false, reveal });
+  assert.equal(one[TOASTS].title, "Tempo: and 1 more new question");
+  assert.deepEqual(one[TOASTS].action, reveal);
+});
+
+test("no new questions, no toasts", () => {
+  assert.deepEqual(toasts([], { project: "alpha", shown: true, reveal }), []);
+});
+
+test("questions group by goal in tempo's order, those without one last", () => {
+  const q1 = { number: 1, goal: null };
+  const q2 = { number: 2, goal: "Ship" };
+  const q3 = { number: 3, goal: "Fix" };
+  const q4 = { number: 4, goal: "Ship" };
+  const q5 = { number: 5 };
+  assert.deepEqual(goals([q1, q2, q3, q4, q5]), [
+    ["Ship", [q2, q4]],
+    ["Fix", [q3]],
+    ["", [q1, q5]],
+  ]);
+  assert.deepEqual(goals([]), []);
 });
