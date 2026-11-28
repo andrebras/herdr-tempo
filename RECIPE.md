@@ -73,6 +73,9 @@ while the panel is hidden.
   project's next open question opens, or the list when none is left.
 - **Ask for more context** (only with a note): `tempo reply <n> --project <p> -- <note>`.
   The note box empties and the question reloads, with "Waiting on Claude…" shown.
+- **Cmd+Enter** (Ctrl+Enter on Linux) in the note does what Send answer does with an
+  option picked, else what Ask for more context does with a note, else nothing. Enter and
+  Shift+Enter start a new line.
 - **A failed send:** an error notice with Tempo's message; the question stays.
 - **An open question** reloads when its version or waiting state changes, and closes when
   it is no longer open.
@@ -93,7 +96,7 @@ while the panel is hidden.
 
 - **Mod:** `mods/tempo/` with `main.js` (the view), the modules it imports that know
   nothing about Herdr (`text.js`, `questions.js`, `commands.js`, `timing.js`,
-  `reads.js`), `icon.svg` (the button's icon) and `mod.json`:
+  `reads.js`, `note.js`), `icon.svg` (the button's icon) and `mod.json`:
   `place: "none"`, title "Tempo", `panel: {title: "Tempo", icon: "icon.svg"}`, and two
   palette entries in group "Tempo": "Show or hide Tempo" (`layout.toggle {id: "panel",
   stack: "panel-body", child: "panel-tempo"}`, words `questions sidebar panel`) and "Show
@@ -126,6 +129,8 @@ while the panel is hidden.
 - **Pass the note as one word** (`--note=<note>`) and the follow-up after `--`, so text that
   starts with a dash isn't read as an option.
 - `tempo show --json` has no waiting state; take it from the list.
+- **The note box types the line break before it reports Cmd+Enter** (its `submit` event,
+  with `secondary` set). Take out the `\n` just before the cursor before sending.
 - A database set with `TEMPO_DB`, or a branch's own, isn't watched; the timer still reads
   it.
 - Under `herdr-app check` (`checking()`), run no programs and start no timers.

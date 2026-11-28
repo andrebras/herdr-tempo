@@ -11,7 +11,8 @@
 // when you send.
 //
 // This file is the view and what talks to Herdr; what knows nothing about Herdr is in
-// modules beside it (text.js, questions.js, commands.js, timing.js, reads.js), with tests.
+// modules beside it (text.js, questions.js, commands.js, timing.js, reads.js, note.js), with
+// tests.
 
 import { View, div } from "gpui-kit";
 import { h_flex, Textarea, TextareaState, TextView, v_flex } from "gpui-base";
@@ -32,6 +33,7 @@ import {
   window,
 } from "herdr";
 import { parseCommand } from "./commands.js";
+import { submitAction, withoutTypedBreak } from "./note.js";
 import { goals, toasts, unannounced } from "./questions.js";
 import { Reads } from "./reads.js";
 import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
@@ -160,6 +162,7 @@ export default class Tempo extends View {
     this.note = TextareaState.new({ placeholder: "A note, or what you need to know" });
     this.note.set_auto_grow(3, 10);
     this.note.on("change", (_e, cx) => cx.notify());
+    this.note.on("submit", (e, cx) => this.submit(e, cx));
     if (checking()) return;
     cx.spawn((cx) => this.find(cx));
     cx.timer.every(SPACE_MS, (cx) => {
@@ -368,6 +371,27 @@ export default class Tempo extends View {
       notify({ title: "Tempo", body: friendly(error, "open the question"), level: "error" });
       this.open = null;
     }
+    cx.notify();
+  }
+
+  // Cmd+Enter (Ctrl+Enter off macOS) in the note: Send answer with an option picked, else
+  // Ask for more context with a note. Enter and Shift+Enter only start a new line.
+  /**
+   * @param {import("gpui-base").InputEvent} e
+   * @param {Context} cx
+   */
+  submit(e, cx) {
+    if (!e.secondary) return;
+    // The note box typed a line break before it reported the key: take it out.
+    const cursor = this.note.selected_range().start;
+    const text = withoutTypedBreak(this.note.value(), cursor);
+    if (text !== null) {
+      this.note.set_value(text);
+      this.note.set_selected_range({ start: cursor - 1, end: cursor - 1 });
+    }
+    const action = submitAction({ pick: this.open?.pick, note: this.note.value(), sending: this.sending });
+    if (action === "answer") cx.spawn((cx) => this.send(cx));
+    else if (action === "more") cx.spawn((cx) => this.followUp(cx));
     cx.notify();
   }
 
@@ -633,7 +657,10 @@ export default class Tempo extends View {
         div()
           .text_size(size(-1))
           .text_color(t.dim)
-          .child("Pick an option to answer. To send only a note, use Ask for more context: the question stays open."),
+          .child(
+            "Pick an option to answer. To send only a note, use Ask for more context: the question stays open. " +
+              "⌘Enter in the note does either (Ctrl+Enter on Linux).",
+          ),
       )
       .when(q.entries.length > 0, (el) =>
         el.child(heading(t, "Thread")).children(q.entries.map((e) => this.entry(t, e))),
