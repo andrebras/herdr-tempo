@@ -35,5 +35,6 @@ jobs:
           node -e 'const m = JSON.parse(require("fs").readFileSync("mods/tempo/mod.json", "utf8"));
           if (!m || typeof m !== "object" || Array.isArray(m)) throw new Error("mod.json is not an object");'
       - run: npm run lint
+      - run: npm run format:check
       - run: npm run typecheck
       - run: npm test

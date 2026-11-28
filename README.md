@@ -94,6 +94,7 @@ You need Node.js 22.13 or newer. The exact version is pinned in `.tool-versions`
 npm ci             # install the development tools
 npm test           # run the unit tests
 npm run lint       # check the code with Biome
+npm run format     # format the code with Biome
 npm run typecheck  # check the types (main.js too, when Herdr is installed)
 bin/ci             # run every check, and load the mod in Herdr when herdr-app is installed
 ```
