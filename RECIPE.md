@@ -84,8 +84,8 @@ while the panel is hidden.
   the Tempo button while the panel is hidden.
 - **Agent status:** the panel shows none of its own. A question where Claude owes a reply
   has its label in `working`.
-- **Palette:** "Show or hide Tempo" toggles the panel. "Show the next open question" sends
-  `tempo.open`, which opens the project's first question, or shows "No open questions."
+- **Palette:** "Show or hide Tempo" toggles the panel. "Show the open questions" only shows
+  it (`layout.select` with `show`), so it never hides it.
 - **Never:** edits or deletes a question, opens Tempo's database itself, or touches the
   network.
 
@@ -95,7 +95,8 @@ while the panel is hidden.
   `place: "none"`, title "Tempo", `panel: {title: "Tempo", icon: "icon.svg"}`, and two
   palette entries in group "Tempo": "Show or hide Tempo" (`layout.toggle {id: "panel",
   stack: "panel-body", child: "panel-tempo"}`, words `questions sidebar panel`) and "Show
-  the next open question" (`tempo.open`, words `questions`).
+  the open questions" (`layout.select {stack: "panel-body", child: "panel-tempo", show:
+  true}`, words `questions`).
 - **Libraries:** `View` and `div` from `gpui-kit`; `h_flex`, `v_flex`, `Textarea`,
   `TextareaState` and `TextView` (Markdown, with `raw_html(false)`) from `gpui-base`.
 - **Herdr functions:** `spaces`, `panes`, `layout`, `theme`, `settings`, `window`, `home`,
@@ -116,8 +117,6 @@ while the panel is hidden.
 - **The `panel` key exists only in a fork of Herdr**
   ([andrebras/herdr-app](https://github.com/andrebras/herdr-app)). On the Herdr released at
   herdr.dev the panel does not appear.
-- **"Show the next open question" does nothing while the panel is hidden:** Herdr delivers
-  a mod's commands only to shown copies. Notices avoid this by showing the panel instead.
 - **Thread times** are Tempo's UTC (Coordinated Universal Time) stamps with the `Z`
   dropped, not local time.
 - **Notices** compare `created_at` at one-second precision, so a question made in the same

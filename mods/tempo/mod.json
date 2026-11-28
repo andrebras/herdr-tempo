@@ -18,8 +18,13 @@
       "group": "Tempo"
     },
     {
-      "title": "Show the next open question",
-      "command": "tempo.open",
+      "title": "Show the open questions",
+      "command": "layout.select",
+      "args": {
+        "stack": "panel-body",
+        "child": "panel-tempo",
+        "show": true
+      },
       "words": "questions",
       "group": "Tempo"
     }

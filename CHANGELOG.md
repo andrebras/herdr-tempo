@@ -21,8 +21,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - While the panel is hidden, the Tempo button shows how many questions are open.
 - The questions are read again as soon as Tempo's database changes, and every few seconds
   as a fallback (less often while the window is hidden).
-- Two command palette entries under Tempo: "Show or hide Tempo" and "Show the next open
-  question".
+- Two command palette entries under Tempo: "Show or hide Tempo" and "Show the open
+  questions", which only shows the panel.
 - Text sizes follow Herdr's terminal font size, and colours follow Herdr's theme.
 - Unit tests for how question text becomes Markdown, and CI (continuous integration) that
   runs the lint and the tests on every pull request.
