@@ -234,7 +234,8 @@ export default class Tempo extends View {
   }
 
   // Another space shows: its last list and count at once (if seen before), then a fresh
-  // read. render calls this, and so does a timer, since a hidden panel never draws.
+  // read. A task render starts calls this, and so does a timer, since a hidden panel never
+  // draws.
   // Once per switch: a read that fails leaves this.mine on the old space, and must not
   // make every tick read again.
   /** @param {AsyncContext} cx */
@@ -249,6 +250,7 @@ export default class Tempo extends View {
     }
     // The panel shows the shown space's project alone: a question of another one closes.
     if (this.open && this.open.project !== (last?.[0]?.project ?? null)) this.open = null;
+    cx.notify();
     cx.spawn((cx) => this.refresh(cx));
   }
 
@@ -436,7 +438,10 @@ export default class Tempo extends View {
     // Herdr gives each colour as a "#rrggbb" string.
     const t = /** @type {Theme} */ (theme());
     const cwd = shownFolder();
-    if (this.tempo && cwd !== (this.mine?.cwd ?? null)) this.switchSpace(cx);
+    // Herdr draws again when the shown space changes, so this is where a switch shows first.
+    // render only describes the panel and changes nothing (setting the count would redraw
+    // every mod), so a task switches, and draws the new space's list right after this frame.
+    if (this.tempo && cwd !== (this.mine?.cwd ?? null)) cx.spawn((cx) => this.switchSpace(cx));
     const body = this.open ? this.detail(t) : this.list(t, cwd);
     // Drawn as Files and Changes are, beside them.
     return v_flex()
