@@ -26,3 +26,21 @@ export function withoutTypedBreak(text, cursor) {
   if (cursor < 1 || text[cursor - 1] !== "\n") return null;
   return text.slice(0, cursor - 1) + text.slice(cursor);
 }
+
+// What to say when the open question leaves the list while a note is typed: answered or
+// archived elsewhere (Tempo's page, the terminal, another panel), by its status in Tempo.
+// The note stays on screen to copy, as on Tempo's page.
+/**
+ * @param {number} number
+ * @param {string | null | undefined} status
+ * @returns {string}
+ */
+export function leftNotice(number, status) {
+  const what =
+    status === "answered"
+      ? "was answered elsewhere"
+      : status === "archived"
+        ? "was archived elsewhere"
+        : "is no longer here";
+  return `Q${number} ${what}, so it is no longer open. Your note is still here to copy.`;
+}

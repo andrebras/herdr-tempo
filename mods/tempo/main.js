@@ -34,7 +34,7 @@ import {
 } from "herdr";
 import { answerArgs, refusal, rewordNotice } from "./answer.js";
 import { parseCommand } from "./commands.js";
-import { submitAction, withoutTypedBreak } from "./note.js";
+import { leftNotice, submitAction, withoutTypedBreak } from "./note.js";
 import { goals, toasts, unannounced } from "./questions.js";
 import { Reads } from "./reads.js";
 import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
@@ -66,8 +66,10 @@ import {
  */
 /**
  * notice: what changed under the person, such as a reword while they were answering.
+ * left: the question was answered or archived elsewhere; it stays only so the note can be
+ * copied, and nothing can be sent.
  * @typedef {{ project: string, number: number, question: Full | null, pick: string | null,
- *   notice: string | null }} Open
+ *   notice: string | null, left?: boolean }} Open
  */
 
 // The files a change to the questions touches: the database and its write-ahead log. Not
@@ -285,10 +287,8 @@ export default class Tempo extends View {
       if (timed && moved && this.watching) this.missed = true;
       // With no space (cwd null) this.mine is null: ?? null keeps null and undefined from
       // counting as a change, which would draw, and so read again, without end.
-      const changed =
-        moved ||
-        JSON.stringify(mine) !== JSON.stringify(this.mine?.questions ?? null) ||
-        cwd !== (this.mine?.cwd ?? null);
+      const elsewhere = cwd !== (this.mine?.cwd ?? null);
+      const changed = moved || JSON.stringify(mine) !== JSON.stringify(this.mine?.questions ?? null) || elsewhere;
       this.all = all;
       this.mine = cwd ? { cwd, questions: mine, project: mine[0]?.project ?? null } : null;
       // After this.mine: a project's first question is what names the shown project, and
@@ -296,7 +296,10 @@ export default class Tempo extends View {
       this.announce(all);
       const count = mine?.length ?? 0;
       showCount(count);
-      if (this.open && this.open.project !== this.mine?.project) this.open = null;
+      // Another project shows: its question closes. An empty list names no project: the
+      // question closes only if the space changed; in the same space, follow() sees it leave.
+      const project = this.mine?.project;
+      if (this.open && (project ? this.open.project !== project : elsewhere)) this.open = null;
       this.error = null;
       if (this.open) await this.follow(cx);
       if (changed) cx.notify();
@@ -317,15 +320,34 @@ export default class Tempo extends View {
   }
 
   // Keep the open question current: reread it when it changed, close it once it isn't open.
+  // With a note typed, it stays instead, with a line saying it was answered elsewhere, so
+  // the note isn't lost: the person copies it, then goes back.
   /** @param {AsyncContext} cx */
   async follow(cx) {
     // Called only while a question shows.
-    const { project, number, question } = /** @type {Open} */ (this.open);
+    const open = /** @type {Open} */ (this.open);
+    const { project, number, question } = open;
     const now = this.listed(project, number);
     if (!now) {
-      this.open = null;
+      if (open.left) return;
+      if (!this.note.value().trim()) {
+        this.open = null;
+        return cx.notify();
+      }
+      const status = await tempo(
+        /** @type {string} */ (this.tempo),
+        ["show", String(number), "--json", "--project", project],
+        home(),
+      )
+        .then((q) => q.status)
+        .catch(() => null);
+      // Open again (reopened meanwhile): the next read lists it.
+      if (this.open !== open || status === "open") return;
+      Object.assign(open, { left: true, pick: null, notice: leftNotice(number, status) });
       cx.notify();
-    } else if (now.updated_at !== question?.updated_at || now.waiting !== question?.waiting) {
+    } else if (open.left || now.updated_at !== question?.updated_at || now.waiting !== question?.waiting) {
+      // Back in the list (reopened elsewhere): it can be answered again.
+      if (open.left) Object.assign(open, { left: false, notice: null });
       await this.load(cx);
     }
   }
@@ -400,7 +422,8 @@ export default class Tempo extends View {
       this.note.set_value(text);
       this.note.set_selected_range({ start: cursor - 1, end: cursor - 1 });
     }
-    const action = submitAction({ pick: this.open?.pick, note: this.note.value(), sending: this.sending });
+    const busy = this.sending || Boolean(this.open?.left);
+    const action = submitAction({ pick: this.open?.pick, note: this.note.value(), sending: busy });
     if (action === "answer") cx.spawn((cx) => this.send(cx));
     else if (action === "more") cx.spawn((cx) => this.followUp(cx));
     cx.notify();
@@ -413,7 +436,7 @@ export default class Tempo extends View {
   /** @param {AsyncContext} cx */
   async send(cx) {
     const { project, number, pick, question } = this.open ?? {};
-    if (!pick || !project || !number || !question || this.sending) return;
+    if (!pick || !project || !number || !question || this.open?.left || this.sending) return;
     const answer = { number, pick, project, note: this.note.value(), version: question.version };
     const failed = "The answer wasn't saved.";
     let r = await this.deliver(cx, answerArgs(answer), failed, (stderr) => refusal(stderr) !== null);
@@ -445,7 +468,7 @@ export default class Tempo extends View {
   async followUp(cx) {
     const body = this.note.value().trim();
     const { project, number } = this.open ?? {};
-    if (!body || !project || this.sending) return;
+    if (!body || !project || this.open?.left || this.sending) return;
     // The text after --, so one that starts with a dash isn't read as an option.
     const args = ["reply", String(number), "--project", project, "--", body];
     if ((await this.deliver(cx, args, "The follow-up wasn't saved.")).ok) {
@@ -682,10 +705,15 @@ export default class Tempo extends View {
       .child(
         h_flex()
           .gap(8)
-          .child(this.button(t, "tempo-send", "Send answer", Boolean(pick), true, (cx) => this.send(cx)))
+          .child(this.button(t, "tempo-send", "Send answer", Boolean(pick) && !open.left, true, (cx) => this.send(cx)))
           .child(
-            this.button(t, "tempo-more", "Ask for more context", Boolean(this.note.value().trim()), false, (cx) =>
-              this.followUp(cx),
+            this.button(
+              t,
+              "tempo-more",
+              "Ask for more context",
+              Boolean(this.note.value().trim()) && !open.left,
+              false,
+              (cx) => this.followUp(cx),
             ),
           ),
       )
