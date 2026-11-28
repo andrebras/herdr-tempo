@@ -70,6 +70,10 @@ it, delete that folder.
 The panel sits in Herdr's side panel, beside Files and Changes. The Tempo button in the tab
 bar shows and hides it.
 
+In the note box under a question, Cmd+Enter (Ctrl+Enter on Linux) sends: the answer when an
+option is picked, else the note alone as a request for more context. Enter starts a new
+line.
+
 Herdr's command palette has two entries under Tempo:
 
 | Entry                   | What it does                                   |
@@ -101,8 +105,8 @@ bin/ci             # run every check, and load the mod in Herdr when herdr-app i
 
 The unit tests cover the parts that do not need Herdr, which live in modules beside
 `mods/tempo/main.js`: the text the panel shows (`text.js`), which questions are new and how
-they group (`questions.js`), the commands it takes (`commands.js`), how often it reads (`timing.js`) and
-which read of the questions counts (`reads.js`).
+they group (`questions.js`), the commands it takes (`commands.js`), how often it reads (`timing.js`),
+which read of the questions counts (`reads.js`) and what Cmd+Enter in the note sends (`note.js`).
 
 ## License
 
