@@ -102,3 +102,15 @@ function groupBy(items, key) {
   }
   return [...groups.entries()];
 }
+
+// Whether the open question closes after a read. It closes when another project shows. An
+// empty list names no project (project null): then it closes only if the space changed
+// (moved); in the same space the question was answered elsewhere, and follow() handles it.
+/**
+ * @param {string} open the open question's project
+ * @param {string | null | undefined} project the shown list's project
+ * @param {boolean} moved the shown space changed since the last read
+ */
+export function closes(open, project, moved) {
+  return project ? open !== project : moved;
+}

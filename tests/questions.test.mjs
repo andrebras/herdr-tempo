@@ -1,7 +1,7 @@
 // Tests for questions.js: which questions are new, and how the list groups them.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { goals, TOASTS, toasts, unannounced } from "../mods/tempo/questions.js";
+import { closes, goals, TOASTS, toasts, unannounced } from "../mods/tempo/questions.js";
 import { NEW_TOAST_MS } from "../mods/tempo/timing.js";
 
 const q = (number, project, created_at = "2026-01-31T09:05:00Z") => ({ number, project, created_at });
@@ -92,4 +92,17 @@ test("questions group by goal in tempo's order, those without one last", () => {
     ["", [q1, q5]],
   ]);
   assert.deepEqual(goals([]), []);
+});
+
+test("the open question closes when another project shows", () => {
+  assert.equal(closes("alpha", "beta", false), true);
+  assert.equal(closes("alpha", "alpha", true), false);
+});
+
+test("an empty list in the same space keeps it, for follow() to see it leave", () => {
+  assert.equal(closes("alpha", null, false), false);
+});
+
+test("an empty list in another space closes it", () => {
+  assert.equal(closes("alpha", null, true), true);
 });

@@ -35,7 +35,7 @@ import {
 import { answerArgs, refusal, rewordNotice } from "./answer.js";
 import { parseCommand } from "./commands.js";
 import { leftNotice, submitAction, withoutTypedBreak } from "./note.js";
-import { goals, toasts, unannounced } from "./questions.js";
+import { closes, goals, toasts, unannounced } from "./questions.js";
 import { Reads } from "./reads.js";
 import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
 import {
@@ -296,10 +296,7 @@ export default class Tempo extends View {
       this.announce(all);
       const count = mine?.length ?? 0;
       showCount(count);
-      // Another project shows: its question closes. An empty list names no project: the
-      // question closes only if the space changed; in the same space, follow() sees it leave.
-      const project = this.mine?.project;
-      if (this.open && (project ? this.open.project !== project : elsewhere)) this.open = null;
+      if (this.open && closes(this.open.project, this.mine?.project, elsewhere)) this.open = null;
       this.error = null;
       if (this.open) await this.follow(cx);
       if (changed) cx.notify();
