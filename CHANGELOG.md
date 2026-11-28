@@ -29,4 +29,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Unit tests for how question text becomes Markdown, and CI (continuous integration) that
   runs the lint and the tests on every pull request.
 
+### Fixed
+
+- An answer no longer lands on the wrong option when Claude rewords the question while you
+  answer it. The panel sends the version it showed (`tempo answer --version`, Tempo after
+  0.13.4), and when the question was reworded it shows the new wording, clears your pick
+  and keeps your note, as Tempo's page does. With an older Tempo it answers as before.
+
 [Unreleased]: https://github.com/andrebras/herdr-tempo/commits/main

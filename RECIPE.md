@@ -68,9 +68,16 @@ while the panel is hidden.
   one is dropped.
 - **Clicks:** a row opens its question (`tempo show <n> --json --project <p>`); `←` goes
   back to the list. A click on an option picks it, and a second click unpicks it.
-- **Send answer** (only with an option picked): `tempo answer <n> <letter> --project <p>`,
-  with `--note=<note>` when the note isn't empty. Then a "Answered Q<n>" notice, and the
-  project's next open question opens, or the list when none is left.
+- **Send answer** (only with an option picked): `tempo answer <n> <letter> --project <p>
+  --version=<shown version>`, with `--note=<note>` when the note isn't empty. Then a
+  "Answered Q<n>" notice, and the project's next open question opens, or the list when none
+  is left.
+- **A reword while answering:** when the open question reloads at a new version, or Tempo
+  refuses the answer ("changed since you looked at it"), the pick is cleared and a notice
+  says so: "Claude reworded this question while you were answering it (now version <v>).",
+  then "Your pick was cleared: read the options again." and "Your note is kept." as they
+  apply. The note stays. A Tempo without `--version` (0.13.4 and older) fails with
+  "unrecognized arguments: --version"; the answer is then sent again without it.
 - **Ask for more context** (only with a note): `tempo reply <n> --project <p> -- <note>`.
   The note box empties and the question reloads, with "Waiting on Claude…" shown.
 - **Cmd+Enter** (Ctrl+Enter on Linux) in the note does what Send answer does with an
