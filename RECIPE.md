@@ -85,7 +85,10 @@ while the panel is hidden.
   Shift+Enter start a new line.
 - **A failed send:** an error notice with Tempo's message; the question stays.
 - **An open question** reloads when its version or waiting state changes, and closes when
-  it is no longer open.
+  it is no longer open. With a note typed, it stays instead, so the note isn't lost: a line
+  says "Q<n> was answered elsewhere, so it is no longer open. Your note is still here to
+  copy." (or archived, from `tempo show --json`'s status), both buttons and Cmd+Enter do
+  nothing, and `←` goes back. If it is reopened meanwhile, it can be answered again.
 - **New questions:** each read compares the newest `created_at` with the one last
   announced. Up to three new ones get a notice, "Tempo: Q<n> in <project>" with the title,
   for 8 seconds. For the shown project, a click opens the question when the panel shows,

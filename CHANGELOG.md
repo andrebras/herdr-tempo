@@ -35,5 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   answer it. The panel sends the version it showed (`tempo answer --version`, Tempo after
   0.13.4), and when the question was reworded it shows the new wording, clears your pick
   and keeps your note, as Tempo's page does. With an older Tempo it answers as before.
+- A note you are typing is no longer lost when the question is answered elsewhere (on
+  Tempo's page or in the terminal). The question stays on screen with a line saying so, and
+  the note is still there to copy.
 
 [Unreleased]: https://github.com/andrebras/herdr-tempo/commits/main
