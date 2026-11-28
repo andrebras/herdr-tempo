@@ -11,8 +11,8 @@
 // when you send.
 //
 // This file is the view and what talks to Herdr; what knows nothing about Herdr is in
-// modules beside it (text.js, questions.js, commands.js, timing.js, reads.js, note.js), with
-// tests.
+// modules beside it (text.js, questions.js, commands.js, timing.js, reads.js, note.js,
+// answer.js), with tests.
 
 import { View, div } from "gpui-kit";
 import { h_flex, Textarea, TextareaState, TextView, v_flex } from "gpui-base";
@@ -32,6 +32,7 @@ import {
   watchFolder,
   window,
 } from "herdr";
+import { answerArgs, refusal, rewordNotice } from "./answer.js";
 import { parseCommand } from "./commands.js";
 import { submitAction, withoutTypedBreak } from "./note.js";
 import { goals, toasts, unannounced } from "./questions.js";
@@ -63,7 +64,11 @@ import {
  * @typedef {Question & { context: string, options: Option[], recommended?: string | null,
  *   version: number, entries: Entry[] }} Full
  */
-/** @typedef {{ project: string, number: number, question: Full | null, pick: string | null }} Open */
+/**
+ * notice: what changed under the person, such as a reword while they were answering.
+ * @typedef {{ project: string, number: number, question: Full | null, pick: string | null,
+ *   notice: string | null }} Open
+ */
 
 // The files a change to the questions touches: the database and its write-ahead log. Not
 // "-shm", which every read touches too, so a read would start the next one.
@@ -350,7 +355,7 @@ export default class Tempo extends View {
    * @param {AsyncContext} cx
    */
   async show(project, number, cx) {
-    this.open = { project, number, question: null, pick: null };
+    this.open = { project, number, question: null, pick: null, notice: null };
     this.note.set_value("");
     cx.notify();
     await this.load(cx);
@@ -364,6 +369,12 @@ export default class Tempo extends View {
       const question = await tempo(this.tempo, ["show", String(number), "--json", "--project", project], home());
       const list = this.listed(project, number);
       if (this.open?.project === project && this.open.number === number) {
+        // Claude reworded it while the person was answering: the pick's letter may now name
+        // another option, so it is cleared, and a notice says so, as on Tempo's page.
+        const shown = this.open.question?.version;
+        const typed = { pick: this.open.pick, note: this.note.value() };
+        const notice = shown === undefined ? null : rewordNotice(typed, shown, question.version);
+        if (notice) Object.assign(this.open, { pick: null, notice });
         // waiting comes from the list: show --json doesn't carry it.
         this.open.question = { ...question, waiting: list?.waiting ?? null };
       }
@@ -395,16 +406,25 @@ export default class Tempo extends View {
     cx.notify();
   }
 
-  // The person's own answer, sent as the page sends it.
+  // The person's own answer, sent as the page sends it: for the version shown, so Tempo
+  // refuses it if Claude has reworded the question since. Then the question reloads with
+  // the new wording and a notice, and the pick is cleared. A Tempo too old for --version
+  // gets the answer again without it.
   /** @param {AsyncContext} cx */
   async send(cx) {
-    const { project, number, pick } = this.open ?? {};
-    if (!pick || !project || this.sending) return;
-    const args = ["answer", String(number), pick, "--project", project];
-    const note = this.note.value().trim();
-    // As one word, so a note that starts with a dash, such as --force, isn't read as an option.
-    if (note) args.push(`--note=${note}`);
-    if (await this.deliver(cx, args, "The answer wasn't saved.")) {
+    const { project, number, pick, question } = this.open ?? {};
+    if (!pick || !project || !number || !question || this.sending) return;
+    const answer = { number, pick, project, note: this.note.value(), version: question.version };
+    const failed = "The answer wasn't saved.";
+    let r = await this.deliver(cx, answerArgs(answer), failed, (stderr) => refusal(stderr) !== null);
+    if (refusal(r.stderr) === "old") r = await this.deliver(cx, answerArgs({ ...answer, version: null }), failed);
+    if (refusal(r.stderr) === "reworded") {
+      await this.refresh(cx, true);
+      await this.load(cx);
+      // load() clears the pick when it finds the new wording; if it couldn't, Tempo's own
+      // words say why, and the pick still goes, so the same letter isn't sent again.
+      if (this.open?.pick) Object.assign(this.open, { pick: null, notice: r.stderr.replace(/^tempo: /, "").trim() });
+    } else if (r.ok) {
       notify({
         title: `Answered Q${number}`,
         body: `(${pick}) sent to Claude.`,
@@ -428,8 +448,10 @@ export default class Tempo extends View {
     if (!body || !project || this.sending) return;
     // The text after --, so one that starts with a dash isn't read as an option.
     const args = ["reply", String(number), "--project", project, "--", body];
-    if (await this.deliver(cx, args, "The follow-up wasn't saved.")) {
+    if ((await this.deliver(cx, args, "The follow-up wasn't saved.")).ok) {
       this.note.set_value("");
+      // A reword notice said the note was kept; it is sent now.
+      if (this.open) this.open.notice = null;
       await this.refresh(cx, true);
       await this.load(cx);
     }
@@ -437,13 +459,16 @@ export default class Tempo extends View {
   }
 
   // Run what the person sent (tempo answer or tempo reply), with both buttons off while it
-  // runs. True when it worked; else a toast says why, with failed when tempo doesn't.
+  // runs. ok when it worked; else a toast says why, with failed when tempo doesn't, unless
+  // handled says the caller deals with that error itself.
   /**
    * @param {AsyncContext} cx
    * @param {string[]} args
    * @param {string} failed
+   * @param {(stderr: string) => boolean} [handled]
+   * @returns {Promise<{ ok: boolean, stderr: string }>}
    */
-  async deliver(cx, args, failed) {
+  async deliver(cx, args, failed, handled = () => false) {
     this.sending = true;
     cx.notify();
     // A question shows only once the tempo command was found.
@@ -453,8 +478,9 @@ export default class Tempo extends View {
       stderr: String(e),
     }));
     this.sending = false;
-    if (r.code !== 0) notify({ title: "Tempo", body: r.stderr.trim() || failed, level: "error" });
-    return r.code === 0;
+    const ok = r.code === 0;
+    if (!ok && !handled(r.stderr)) notify({ title: "Tempo", body: r.stderr.trim() || failed, level: "error" });
+    return { ok, stderr: ok ? "" : r.stderr };
   }
 
   /** @param {Context} cx */
@@ -623,6 +649,18 @@ export default class Tempo extends View {
             .text_size(size(-1))
             .text_color(t.working)
             .child("Waiting on Claude to answer your follow-up."),
+        ),
+      )
+      .when(Boolean(open.notice), (el) =>
+        el.child(
+          div()
+            .px(8)
+            .py(6)
+            .rounded(6)
+            .bg(t.raised)
+            .text_size(size(-1))
+            .text_color(t.blocked)
+            .child(open.notice ?? ""),
         ),
       )
       .child(rich(`ctx-${q.project}-${q.number}-${q.version}`, q.context).text_size(size(1)).text_color(t.foreground))

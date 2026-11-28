@@ -24,7 +24,10 @@ It is a mod, a small plugin that runs inside Herdr.
 ## Requirements
 
 - **Tempo**, with the `tempo` command on your `PATH`. See
-  [Tempo's install guide](https://github.com/andrebras/tempo#install).
+  [Tempo's install guide](https://github.com/andrebras/tempo#install). With a Tempo that has
+  `tempo answer --version` (after 0.13.4), an answer is refused if Claude reworded the
+  question after the panel showed it; with an older one, the panel still works without
+  that check.
 - **A Herdr that puts mods in its side panel**, through the `panel` key in a mod's
   `mod.json` (the file that describes a mod). Today only a fork of Herdr does that:
   [andrebras/herdr-app](https://github.com/andrebras/herdr-app). The Herdr released on

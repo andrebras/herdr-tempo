@@ -16,6 +16,7 @@
     "mods/tempo/commands.js",
     "mods/tempo/timing.js",
     "mods/tempo/reads.js",
-    "mods/tempo/note.js"
+    "mods/tempo/note.js",
+    "mods/tempo/answer.js"
   ]
 }
