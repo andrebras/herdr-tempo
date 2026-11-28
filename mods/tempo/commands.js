@@ -5,7 +5,8 @@
 // whose name may hold colons. null for any other command.
 /**
  * @param {string} command
- * @returns {{ name: "open", number: number | null, project: string | null } | null}
+ * @returns {{ name: "open", number: number, project: string }
+ *   | { name: "open", number: null, project: null } | null}
  */
 export function parseCommand(command) {
   const [name, number, ...rest] = command.split(":");
