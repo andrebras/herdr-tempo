@@ -450,6 +450,8 @@ export default class Tempo extends View {
     const args = ["reply", String(number), "--project", project, "--", body];
     if ((await this.deliver(cx, args, "The follow-up wasn't saved.")).ok) {
       this.note.set_value("");
+      // A reword notice said the note was kept; it is sent now.
+      if (this.open) this.open.notice = null;
       await this.refresh(cx, true);
       await this.load(cx);
     }
