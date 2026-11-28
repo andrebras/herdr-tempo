@@ -18,6 +18,12 @@ export const FIND_MS = 30000;
 export const SPACE_MS = 1000;
 // How long any tempo command may run before it's stopped and counts as failed.
 export const TEMPO_TIMEOUT_MS = 15000;
+// A timer tick can come a little early; a read this close to due counts as due, so it
+// isn't put off by a whole tick.
+export const DUE_SLACK_MS = 100;
+// How long a toast shows: one about a new question, and a short one that only confirms.
+export const NEW_TOAST_MS = 8000;
+export const BRIEF_TOAST_MS = 3000;
 
 // How long to wait between timed reads: rarely while the watch reports every change,
 // else often while the window shows and less while it is hidden.

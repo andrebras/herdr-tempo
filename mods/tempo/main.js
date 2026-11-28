@@ -35,7 +35,16 @@ import { parseCommand } from "./commands.js";
 import { goals, toasts, unannounced } from "./questions.js";
 import { Reads } from "./reads.js";
 import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
-import { FIND_MS, readEvery, REWATCH_MS, SHOWN_MS, SPACE_MS, TEMPO_TIMEOUT_MS } from "./timing.js";
+import {
+  BRIEF_TOAST_MS,
+  DUE_SLACK_MS,
+  FIND_MS,
+  readEvery,
+  REWATCH_MS,
+  SHOWN_MS,
+  SPACE_MS,
+  TEMPO_TIMEOUT_MS,
+} from "./timing.js";
 
 /** @typedef {import("gpui-kit").AsyncContext} AsyncContext */
 /** @typedef {import("gpui-kit").Context} Context */
@@ -162,7 +171,7 @@ export default class Tempo extends View {
         cx.spawn((cx) => this.watch(cx));
       }
       const wait = readEvery(this.watching && !this.missed, window()?.visible !== false);
-      if (Date.now() - this.last >= wait - 100) cx.spawn((cx) => this.refresh(cx, false, true));
+      if (Date.now() - this.last >= wait - DUE_SLACK_MS) cx.spawn((cx) => this.refresh(cx, false, true));
     });
     cx.spawn(async (cx) => {
       for (;;) {
@@ -195,7 +204,7 @@ export default class Tempo extends View {
     if (parsed.number !== null) return this.show(parsed.project, parsed.number, cx);
     const first = this.mine?.questions[0];
     if (first) return this.show(first.project, first.number, cx);
-    notify({ title: "Tempo", body: "No open questions.", level: "info", timeout: 3000 });
+    notify({ title: "Tempo", body: "No open questions.", level: "info", timeout: BRIEF_TOAST_MS });
   }
 
   // Read the questions again as soon as Tempo's database changes, so the count on the
@@ -370,7 +379,12 @@ export default class Tempo extends View {
     }));
     this.sending = false;
     if (r.code === 0) {
-      notify({ title: `Answered Q${number}`, body: `(${pick}) sent to Claude.`, level: "success", timeout: 3000 });
+      notify({
+        title: `Answered Q${number}`,
+        body: `(${pick}) sent to Claude.`,
+        level: "success",
+        timeout: BRIEF_TOAST_MS,
+      });
       // On to the project's next open question, as the page does; the list when none is left.
       this.open = null;
       await this.refresh(cx, true);

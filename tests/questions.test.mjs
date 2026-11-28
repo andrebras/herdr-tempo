@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { goals, TOASTS, toasts, unannounced } from "../mods/tempo/questions.js";
+import { NEW_TOAST_MS } from "../mods/tempo/timing.js";
 
 const q = (number, project, created_at = "2026-01-31T09:05:00Z") => ({ number, project, created_at });
 
@@ -45,7 +46,7 @@ test("a new question of the shown project opens it when the panel shows", () => 
     title: "Tempo: Q1 in alpha",
     body: "Title 1",
     level: "info",
-    timeout: 8000,
+    timeout: NEW_TOAST_MS,
     action: { name: "tempo.open:1:alpha" },
   });
 });

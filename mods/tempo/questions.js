@@ -13,6 +13,8 @@
  * @typedef {{ title: string, body: string, level: "info", timeout: number, action?: Action }} Toast
  */
 
+import { NEW_TOAST_MS } from "./timing.js";
+
 // The newest few new questions get a toast each; one more toast counts the rest.
 export const TOASTS = 3;
 
@@ -56,7 +58,7 @@ export function toasts(fresh, { project, shown, reveal }) {
       title: `Tempo: ${q.label} in ${q.project}`,
       body: q.title,
       level: "info",
-      timeout: 8000,
+      timeout: NEW_TOAST_MS,
       ...(q.project === project ? { action } : {}),
     };
   });
@@ -66,7 +68,7 @@ export function toasts(fresh, { project, shown, reveal }) {
       title: `Tempo: and ${more} more new question${more === 1 ? "" : "s"}`,
       body: "The Tempo panel lists the shown project's questions.",
       level: "info",
-      timeout: 8000,
+      timeout: NEW_TOAST_MS,
       ...(shown ? {} : { action: reveal }),
     });
   }
