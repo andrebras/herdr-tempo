@@ -9,6 +9,9 @@
 // It runs programs: `tempo list --json` every few seconds (less often while the window is
 // hidden), `tempo show --json` for the open question, and `tempo answer` or `tempo reply`
 // when you send.
+//
+// This file is the view and what talks to Herdr; what knows nothing about Herdr is in
+// modules beside it (text.js, questions.js, commands.js, timing.js), with tests.
 
 import { View, div } from "gpui-kit";
 import { h_flex, Textarea, TextareaState, TextView, v_flex } from "gpui-base";
@@ -28,31 +31,17 @@ import {
   watchFolder,
   window,
 } from "herdr";
+import { parseCommand } from "./commands.js";
+import { goals, toasts, unannounced } from "./questions.js";
+import { entryText, friendly, lineBreaks, localTime, place } from "./text.js";
+import { FIND_MS, readEvery, REWATCH_MS, SHOWN_MS, SPACE_MS, TEMPO_TIMEOUT_MS } from "./timing.js";
 
-// How often to read the questions while the window shows, and while it is hidden, when
-// nothing else says they changed. Each read starts tempo twice.
-const SHOWN_MS = 4000;
-const HIDDEN_MS = 30000;
-// How often while the watch on Tempo's database works: it reads at once on every change,
-// so the timer is only a safety net.
-const WATCHED_MS = 60000;
-// How long to wait before watching again after a watch ended or couldn't start.
-const REWATCH_MS = 60000;
-// How often to look for the tempo command again while it's missing, so the panel works
-// once you install Tempo, without a restart.
-const FIND_MS = 30000;
-// How often to look for another shown space. Cheap (no program runs), and it keeps the count
-// on the Tempo button right while the panel is hidden, when it never draws.
-const SPACE_MS = 1000;
 // The files a change to the questions touches: the database and its write-ahead log. Not
 // "-shm", which every read touches too, so a read would start the next one.
 const DATABASE = /\/questions\.db(-wal)?$/;
-// How long any tempo command may run before it's stopped and counts as failed.
-const TEMPO_TIMEOUT_MS = 15000;
 // The open questions already announced, as "number:project", shared so copies and reloads
-// never repeat a toast. The newest few get a toast each; one more toast counts the rest.
+// never repeat a toast.
 const ANNOUNCED = "tempo.announced";
-const TOASTS = 3;
 // The shown project's open-question count: Herdr shows it on the Tempo button while the
 // panel is hidden.
 const BADGE = "tempo.badge";
@@ -63,27 +52,10 @@ function size(step) {
   return (settings()?.font_size ?? 14) - 1 + step;
 }
 
-// Question text as Tempo's page shows it (rich() in tempo/page.js): a little Markdown, and
-// a single line break starts a new line. Markdown would join those lines, so each one ends
-// with a hard break (two spaces) instead. Where text meets a list, either way, a blank line
-// goes between them, so the list starts and ends there, as on the page. HTML in the text
-// shows as typed, never as markup.
+// Question text as Tempo's page shows it (lineBreaks() in text.js). HTML in the text shows
+// as typed, never as markup.
 function rich(id, text) {
   return TextView.markdown(id, lineBreaks(text)).raw_html(false).selectable(true);
-}
-
-// "- ", "* ", "1. " or "1) " at the start of a line, as on the page.
-const LIST_LINE = /^\s*([-*]|\d+[.)])\s+/;
-
-function lineBreaks(text) {
-  return String(text ?? "")
-    .replace(/\r\n/g, "\n")
-    .replace(/([^\n]*)\n(?=([^\n]+))/g, (match, line, next) => {
-      if (!line.trim()) return match;
-      const list = LIST_LINE.test(line);
-      if (list !== LIST_LINE.test(next)) return `${line}\n\n`;
-      return list ? match : `${line}  \n`;
-    });
 }
 
 // Shown while there's no tempo command. Tempo comes as a Claude Code plugin; its
@@ -153,9 +125,9 @@ export default class Tempo extends View {
 
   // "open": the shown project's first question; "open:N:project": that one.
   async command(command, cx) {
-    const [name, number, ...rest] = command.split(":");
-    if (name !== "open") return;
-    if (number) return this.show(rest.join(":"), Number(number), cx);
+    const parsed = parseCommand(command);
+    if (!parsed) return;
+    if (parsed.number !== null) return this.show(parsed.project, parsed.number, cx);
     const first = this.mine?.questions[0];
     if (first) return this.show(first.project, first.number, cx);
     notify({ title: "Tempo", body: "No open questions.", level: "info", timeout: 3000 });
@@ -277,32 +249,8 @@ export default class Tempo extends View {
   // Toast the questions not announced before; the first read only sets the mark.
   announce(all) {
     const { fresh, keys } = unannounced(all, shared(ANNOUNCED));
-    // Every project's new questions are announced, but only the shown project's open
-    // here when clicked: the panel shows that project alone. A command reaches the
-    // panel only while it shows, so a hidden one is shown instead.
-    const shown = panelShown();
     const reveal = { name: "layout.select", args: { stack: "panel-body", child: PANEL, show: true } };
-    for (const q of fresh.slice(-TOASTS)) {
-      const here = q.project === this.mine?.project;
-      const action = shown ? { name: `tempo.open:${q.number}:${q.project}` } : reveal;
-      notify({
-        title: `Tempo: ${q.label} in ${q.project}`,
-        body: q.title,
-        level: "info",
-        timeout: 8000,
-        ...(here ? { action } : {}),
-      });
-    }
-    const more = fresh.length - TOASTS;
-    if (more > 0) {
-      notify({
-        title: `Tempo: and ${more} more new question${more === 1 ? "" : "s"}`,
-        body: "The Tempo panel lists the shown project's questions.",
-        level: "info",
-        timeout: 8000,
-        ...(shown ? {} : { action: reveal }),
-      });
-    }
+    for (const toast of toasts(fresh, { project: this.mine?.project, shown: panelShown(), reveal })) notify(toast);
     const mark = shared(ANNOUNCED);
     if (!Array.isArray(mark) || mark.join("\n") !== keys.join("\n")) setShared(ANNOUNCED, keys);
   }
@@ -616,12 +564,6 @@ export default class Tempo extends View {
 
   entry(t, e) {
     const who = e.author === "user" ? "You" : "Claude";
-    const what =
-      e.kind === "answer"
-        ? `answered (${e.choice})${e.body ? `: ${e.body}` : ""}`
-        : e.kind === "reword"
-          ? `reworded the question${e.body ? `: ${e.body}` : ""}`
-          : e.body;
     return v_flex()
       .gap(2)
       .px(8)
@@ -637,7 +579,7 @@ export default class Tempo extends View {
           .child(who)
           .child(localTime(e.created_at)),
       )
-      .child(rich(`entry-${this.open.project}-${this.open.number}-${e.id}`, what));
+      .child(rich(`entry-${this.open.project}-${this.open.number}-${e.id}`, entryText(e)));
   }
 }
 
@@ -687,84 +629,11 @@ async function findTempo() {
   return test?.code === 0 ? fallback : null;
 }
 
-// What went wrong, for people: what failed, and why if known. Tempo's own message is
-// kept (its last line: a Python error ends with the one that says what happened);
-// Herdr's and JavaScript's are put in words.
-function friendly(error, what) {
-  const text = String(error?.message ?? error ?? "").trim();
-  if (/timed out/.test(text)) return `Tempo took too long to ${what}.`;
-  if (error instanceof SyntaxError) {
-    return `Tempo couldn't ${what}: its answer wasn't the JSON the panel expects. Is Tempo up to date?`;
-  }
-  const last = (text.split("\n").filter((line) => line.trim()).pop() ?? "").trim();
-  if (!last) return `Tempo couldn't ${what}.`;
-  return `Tempo couldn't ${what}: ${last}${/[.!?]$/.test(last) ? "" : "."}`;
-}
-
 // Run tempo and read its JSON output.
 async function tempo(path, args, cwd) {
   const r = await exec(path, args, { cwd, timeout: TEMPO_TIMEOUT_MS });
   if (r.code !== 0) throw new Error(r.stderr.trim() || `tempo ${args[0]} failed (${r.code})`);
   return JSON.parse(r.stdout);
-}
-
-// Tempo's times are UTC ("2026-01-31T09:05:00Z"); shown in this computer's time zone, as
-// Tempo's page shows them: "2026-01-31 10:05" one hour east of UTC. Text that isn't a
-// time shows as it is.
-function localTime(stamp) {
-  const at = new Date(stamp);
-  if (Number.isNaN(at.getTime())) return String(stamp ?? "");
-  const two = (n) => String(n).padStart(2, "0");
-  const day = `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())}`;
-  return `${day} ${two(at.getHours())}:${two(at.getMinutes())}`;
-}
-
-// The questions of all (every open one) not in mark, oldest first, and the mark to keep:
-// every open question, so it never grows past them. A question is its project and
-// number: two asked in the same second are both new. A mark that isn't a list (the first
-// read, or the newest time an older panel kept) announces nothing, so no old question
-// toasts after an update.
-function unannounced(all, mark) {
-  const key = (q) => `${q.number}:${q.project}`;
-  const keys = all.map(key).sort();
-  if (!Array.isArray(mark)) return { fresh: [], keys };
-  const known = new Set(mark);
-  const fresh = all
-    .filter((q) => !known.has(key(q)))
-    .sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
-  return { fresh, keys };
-}
-
-// How long to wait between timed reads: rarely while the watch reports every change,
-// else often while the window shows and less while it is hidden.
-function readEvery(watched, visible) {
-  if (watched) return WATCHED_MS;
-  return visible ? SHOWN_MS : HIDDEN_MS;
-}
-
-// Where the list is from: the project, named by its questions, or with none open the
-// shown folder's name. Only Tempo knows which project a folder belongs to (a git
-// checkout's top folder, or a name you gave it), so that's only a hint; for the header
-// alone, never compared with a question's project.
-function place(mine) {
-  if (mine?.project) return mine.project;
-  return (mine?.cwd ?? "").split("/").filter(Boolean).pop() ?? "";
-}
-
-// Questions by goal, keeping tempo's order; questions without a goal come last.
-function goals(questions) {
-  const groups = groupBy(questions, (q) => q.goal ?? "");
-  return [...groups.filter(([g]) => g), ...groups.filter(([g]) => !g)];
-}
-
-function groupBy(items, key) {
-  const groups = new Map();
-  for (const item of items) {
-    const k = key(item);
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(item);
-  }
-  return [...groups.entries()];
 }
 
 function heading(t, text) {
